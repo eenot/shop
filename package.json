@@ -1,0 +1,20 @@
+{
+  "name": "plentiful-shop",
+  "description": "The Plentiful Shop",
+  "repository": "https://github.com/plentiful/shop.git",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "webpack --progress --colors --devtool sourcemap --hot",
+    "watch": "webpack --progress --colors --devtool sourcemap --hot --watch",
+    "start": "webpack-dev-server --progress --colors --devtool sourcemap --hot --port 3000",
+    "clean": "rm -rf node_modules;rm -rf elm-stuff"
+  },
+  "dependencies": {
+    "elm-webpack-loader": "^1.1.1",
+    "file-loader": "^0.8.5",
+    "webpack": "^1.12.0",
+    "webpack-dev-server": "^1.14.0"
+  }
+}

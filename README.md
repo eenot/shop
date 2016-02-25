@@ -37,10 +37,11 @@ Optionally: issues and their assets are delivered via [signed URLs](http://docs.
 
 ### As a customer
 
+Customers use [shopfront](https://github.com/plentiful/shop/tree/master/docs/shopfront.md).
+
 - Sign-up, then sign-in, and sign-out.
-- Top up your account via Stripe.
+- Pay for issues via Stripe.
 - Navigate among issues and preview issues.
-- Buy issues (use your credits to unlock issues one by one).
 
 ## Development
 

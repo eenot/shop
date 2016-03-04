@@ -1,11 +1,5 @@
 # The Plentiful Shop
 
----
-
-**We are hiring**: If you are an Elm developer, please email to Roman <mailto:hi@romanzolotarev.com>.
-
----
-
 ## Use cases
 
 - Programmers sells their screencasts, tutorials (e.g. [Pragmatic Studio](https://pragmaticstudio.com/elm))

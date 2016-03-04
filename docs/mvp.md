@@ -1,0 +1,53 @@
+---
+author: Thomas Weiser <elmdev@thomasweiser.de>
+---
+
+# Shopfront 1.0
+
+- Routing paths
+  - /
+  - /slug
+  - /all
+- Interface components
+  - MainPage
+    - Header
+    - Catalog
+    - Issue
+    - Footer (static)
+  - Header
+    - Shop name
+    - Menu for catalog filters and auth actions (All issues, Related, Purchases, Sign-in, Sign-out)
+  - Catalog
+    - Display a number of small issue cover images with slug and lock state
+    - Highlight selected issue
+    - Previous/Next buttons to cycle through the list of available issues
+    - Both used to display six issues in one line as well as to show the list of all issues.
+  - Issue
+    - Big cover image, name and slug
+    - Teaser
+    - Checkout
+    - If purchased:
+      - Purchase state message
+      - Content body
+      - Catalog
+  - Checkout
+    - One of
+      - Sign-up
+        - email, pw, card-number, expiration date, CVC
+        - Validation of credit card data with Stripe.js
+      - Sign-In
+      - Reset password
+      - Buy issue
+    - Show possible error message
+- Stripe integration
+  - First version
+    - Collect card details from from form data
+    - Validate data with Stripe.js functions (Stripe.card.validateCardNumber etc)
+    - Submit card data to Stripe via Stripe.js
+    - Getting back a "single use token" or an error message
+    - Needed Stripe.js functions are exposed via a native Elm module.
+  - Further Stripe integration needs some server code. Not part of first version's deliverables.
+    - The server processes all further Stripe interactions. It has knowledge of the Stripe account's secret key and the content keys.
+    - The server returns content keys to the client.
+    - The server may also handle recurring charges by returning a customer id.
+    - Communication via HTTP and/or Firebase

@@ -41,7 +41,7 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
     - Show possible error message
 - Stripe integration
   - First version
-    - Collect card details from from form data
+    - Collect card details from form data
     - Validate data with Stripe.js functions (Stripe.card.validateCardNumber etc)
     - Submit card data to Stripe via Stripe.js
     - Getting back a "single use token" or an error message

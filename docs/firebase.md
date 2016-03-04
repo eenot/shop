@@ -53,5 +53,5 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
 
 ## Notes
 
-- The branch `/purchases` is for logging only. It's not readable by the user and it's not needed for normals operations.
-- Stripe API <https://stripe.com/docs/api#charge_object>
+- The branch `/purchases` is for logging only. It is not readable by the user and it is not needed for normal operations.
+- Stripe API <https://stripe.com/docs/api#charge_object>.

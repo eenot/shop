@@ -1,18 +1,16 @@
-module Main (..) where
+module Main (main) where
 
 import Signal exposing (Mailbox, Address, mailbox, message, forwardTo)
 import Html as H exposing (Html)
-
-
--- import Html.Attributes as HA
--- import Html.Events as HE
-
 import StartApp
 import Task exposing (Task)
 import Effects exposing (Effects, Never)
+import History
 import ElmFire
+
 import Store.Shop as Shop
-import Components.Header as Header
+import Store.Issues as Issues
+import Components.Page as Page
 
 
 --------------------------------------------------------------------------------
@@ -29,10 +27,13 @@ firebaseRoot =
 
 appConfig : StartApp.Config Model Action
 appConfig =
-  { init = init
+  { init = init initialPath
   , update = update
   , view = view
-  , inputs = [ serverInput.signal ]
+  , inputs =
+      [ serverInput.signal
+      , Signal.map PathChange History.path
+      ]
   }
 
 
@@ -44,6 +45,9 @@ app =
 serverInput : Mailbox Action
 serverInput =
   mailbox NoOp
+
+
+port initialPath : String
 
 
 port runEffects : Signal (Task Never ())
@@ -62,27 +66,46 @@ main =
 
 type alias Model =
   { shop : Shop.Model
-  , header : Header.Model
+  , issues: Issues.Model
+  , page : Page.Model
   }
 
 
-init : ( Model, Effects Action )
-init =
+init : String -> ( Model, Effects Action )
+init initialPath =
   let
     ( shopModel, shopEffects ) =
-      Shop.init (firebaseRoot |> ElmFire.sub "shop")
+        Shop.init
+          (firebaseRoot |> ElmFire.sub "shop")
+    ( issuesModel, issuesEffects ) =
+        Issues.init
+          (forwardTo serverInput.address IssuesAction)
+          (firebaseRoot |> ElmFire.sub "issues")
+    ( pageModel, pageEffects ) = Page.init
+    ( model, effects ) =
+      update
+        ( PathChange initialPath )
+        { shop = shopModel
+        , issues = issuesModel
+        , page = pageModel
+        }
   in
-    ( { shop = shopModel
-      , header = Header.init
-      }
-    , Effects.map ShopAction shopEffects
+    ( model
+    , Effects.batch
+        [ Effects.map ShopAction shopEffects
+        , Effects.map IssuesAction issuesEffects
+        , Effects.map PageAction pageEffects
+        , effects
+        ]
     )
 
 
 type Action
   = NoOp
+  | PathChange String
   | ShopAction Shop.Action
-  | HeaderAction Header.Action
+  | IssuesAction Issues.Action
+  | PageAction Page.Action
 
 
 update : Action -> Model -> ( Model, Effects Action )
@@ -91,31 +114,52 @@ update action model =
     NoOp ->
       ( model, Effects.none )
 
+    PathChange path ->
+      -- TODO: To be implemented. Just loggin for now
+      always
+        ( model, Effects.none )
+        ( Debug.log "PathChange" path )
+
+
     ShopAction shopAction ->
       let
-        shopModel =
-          Shop.update shopAction model.shop
+        shopModel = Shop.update shopAction model.shop
       in
         ( { model
             | shop = shopModel
-            , header = Header.setShop shopModel model.header
+            , page = Page.setShop shopModel model.page
           }
         , Effects.none
         )
 
-    HeaderAction headerAction ->
-      ( { model
-          | header = Header.update headerAction model.header
-        }
-      , Effects.none
-      )
+    IssuesAction issuesAction ->
+      let
+        issuesModel = Issues.update issuesAction model.issues
+      in
+        ( { model
+            | issues = issuesModel
+            , page = Page.setIssues issuesModel model.page
+          }
+        , Effects.none
+        )
+
+    PageAction pageAction ->
+      let
+        ( pageModel, pageEffects ) =
+          Page.update pageAction model.page
+      in
+        ( { model
+            | page = pageModel
+          }
+        , Effects.map PageAction pageEffects
+        )
 
 
 view : Address Action -> Model -> Html
 view address model =
   H.div
     []
-    [ Header.view
-        (forwardTo address HeaderAction)
-        model.header
+    [ Page.view
+        (forwardTo address PageAction)
+        model.page
     ]

@@ -3,7 +3,7 @@ module Components.Header (Model, init, Action, update, view, setShop) where
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
 import Html.Attributes as HA
-import Html.Events as HE
+-- import Html.Events as HE
 import Store.Shop as Shop
 
 
@@ -32,6 +32,8 @@ view address model =
     [ H.text model.shopName ]
 
 
-setShop : Shop.Shop -> Model -> Model
+-- TODO: Possibly simpler:
+--   Don't include shopName in local model. Give it as a context to view function instead.
+setShop : Shop.Model -> Model -> Model
 setShop shop model =
   { model | shopName = shop.name }

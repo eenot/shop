@@ -7,6 +7,7 @@
   "private": true,
   "scripts": {
     "build": "webpack --progress --colors --devtool sourcemap --hot",
+    "test": "webpack --progress --colors --devtool sourcemap --hot",
     "watch": "webpack --progress --colors --devtool sourcemap --hot --watch",
     "start": "webpack-dev-server --progress --colors --devtool sourcemap --hot --port 3000",
     "clean": "rm -rf node_modules;rm -rf elm-stuff"

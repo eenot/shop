@@ -42,6 +42,8 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
 
 ## Permissions
 
+- `/shop`  
+  readable to anyone
 - `/customers/$uid`  
   readable and writable for user `$uid` logged in
 - `/issues`  

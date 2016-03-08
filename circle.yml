@@ -7,9 +7,9 @@ dependencies:
     - npm install -g elm
   post:
     - npm install
-  cache_directories:
-    - node_modules
-    - elm-stuff
+  # cache_directories:
+  #   - node_modules
+  #   - elm-stuff
 
 test:
   override:

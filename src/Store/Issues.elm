@@ -1,4 +1,7 @@
-module Store.Issues (Model, init, Action, update, Issue, toList) where
+module Store.Issues
+  ( Model, init, Action, update
+  , Issue, noIssues, toList, get
+  ) where
 
 import Dict exposing (Dict)
 import Signal exposing (Address, message, forwardTo)
@@ -19,8 +22,12 @@ import CommonTypes exposing (Slug)
 type alias Model = Dict Slug Issue
 
 type alias Issue =
-  { title: String
+  { title : String
+  , teaser : Maybe String
   }
+
+noIssues : Model
+noIssues = Dict.empty
 
 
 --------------------------------------------------------------------------------
@@ -30,12 +37,19 @@ syncConfig location =
   { location = location
   , orderOptions = ElmFire.orderByKey ElmFire.noRange ElmFire.noLimit
   , encoder =
+      -- Encoding not in use for now, but let's give an encoder anyway.
       \issue -> JE.object
-        [ ("title", JE.string issue.title)
+        [ ( "title", JE.string issue.title )
+        , ( "teaser"
+          , case issue.teaser of
+              Just teaser -> JE.string teaser
+              Nothing -> JE.null
+          )
         ]
   , decoder =
-      ( JD.object1 Issue
-          ("title" := JD.string)
+      ( JD.object2 Issue
+          ( "title" := JD.string )
+          ( JD.maybe ("teaser" := JD.string) )
       )
   }
 
@@ -68,3 +82,7 @@ update action model =
 toList : Model -> List (Slug, Issue)
 toList model =
   Dict.toList model
+
+get : Slug -> Model -> Maybe Issue
+get slug model =
+  Dict.get slug model

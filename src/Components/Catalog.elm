@@ -1,4 +1,7 @@
-module Components.Catalog (Model, init, Action, update, Context, view, setIssues) where
+module Components.Catalog
+  ( Model, init, Action, update, Context, view
+  , setSize, setIssues
+  ) where
 
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
@@ -19,11 +22,11 @@ type alias Model =
   }
 
 
-init : Int -> Model
-init size =
+init : Model
+init =
   { issues = []
   , total = 0
-  , size = size
+  , size = 0
   , position = 0
   , visible = []
   }
@@ -37,7 +40,13 @@ update : Action -> Model -> Model
 update action model =
   case action of
     Scroll amount ->
-      clip { model | position = model.position + amount }
+      adaptVisible { model | position = model.position + amount }
+
+
+setSize : Int -> Model -> Model
+setSize size model =
+  adaptVisible
+    { model | size = size }
 
 
 setIssues : Issues.Model -> Model -> Model
@@ -45,7 +54,7 @@ setIssues issues model =
   let
     list = Issues.toList issues
   in
-    clip
+    adaptVisible
       { model
       | issues = list
       , total = List.length list
@@ -53,8 +62,8 @@ setIssues issues model =
       }
 
 
-clip : Model -> Model
-clip model =
+adaptVisible : Model -> Model
+adaptVisible model =
   let
     position = model.position |> min (model.total - model.size) |> max 0
   in

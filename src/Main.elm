@@ -8,6 +8,7 @@ import Effects exposing (Effects, Never)
 import History
 import ElmFire
 
+import Config
 import Route
 import Store.Shop as Shop
 import Store.Issues as Issues
@@ -19,7 +20,7 @@ import Components.Page as Page
 
 firebaseRoot : ElmFire.Location
 firebaseRoot =
-  ElmFire.fromUrl "https://plentifulshop-demo.firebaseio.com/"
+  ElmFire.fromUrl Config.firebaseUrl
 
 
 --------------------------------------------------------------------------------

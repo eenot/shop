@@ -1,10 +1,12 @@
-module Components.Header (Model, init, Action, update, view, setShop) where
+module Components.Header (Model, init, Action, update, Context, view, setShop) where
 
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
 import Html.Attributes as HA
--- import Html.Events as HE
+import Html.Events as HE
+
 import Store.Shop as Shop
+import Route exposing (Route)
 
 
 type alias Model =
@@ -25,11 +27,28 @@ update action model =
   model
 
 
-view : Address Action -> Model -> Html
-view address model =
+type alias Context =
+  { route : Route
+  , setRouteAddress : Address Route
+  }
+
+
+view : Address Action -> Context -> Model -> Html
+view address context model =
   H.div
     [ HA.class "header" ]
-    [ H.text model.shopName ]
+    [ H.div
+        [ HA.class "shop-name" ]
+        [ H.text model.shopName ]
+    , H.div
+        [ HA.class "menu" ]
+        [ H.button
+            [ HA.disabled (context.route == Route.All)
+            , HE.onClick context.setRouteAddress <| Route.All
+            ]
+            [ H.text "All issues" ]
+        ]
+    ]
 
 
 -- TODO: Possibly simpler:

@@ -1,9 +1,7 @@
-module Store.Shop (Model, init, Action, update, Shop, shop) where
+module Store.Shop (Model, init, Action, update) where
 
-import Signal exposing (Address, message, forwardTo)
 import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
-import Json.Encode as JE
 import Json.Decode as JD exposing ((:=))
 import ElmFire
 
@@ -52,29 +50,14 @@ update action model =
     QueryResult result ->
       case result of
         Err error ->
-          let
-            _ =
-              Debug.log "Firebase: shop query error" error
-          in
-            model
+          always model <|
+            Debug.log "Firebase: shop query error" error
 
         Ok snapshot ->
           case JD.decodeValue decoder snapshot.value of
             Err error ->
-              let
-                _ =
-                  Debug.log "Firebase: shop decoding error" error
-              in
-                model
+              always model <|
+                Debug.log "Firebase: shop decoding error" error
 
             Ok shop ->
               shop
-
-
-type alias Shop =
-  Model
-
-
-shop : Model -> Shop
-shop model =
-  model

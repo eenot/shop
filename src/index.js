@@ -1,6 +1,10 @@
-'use strict'
+'use strict';
 
-require('./index.html')
-var Elm = require('./Main')
+require('./index.html');
+var Elm = require('./Main');
 
-Elm.embed(Elm.Main, document.getElementById('main'))
+Elm.embed (
+  Elm.Main,
+  document.getElementById('main'),
+  { initialPath: window.location.pathname }
+);

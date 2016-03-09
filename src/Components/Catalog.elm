@@ -1,12 +1,13 @@
-module Components.Catalog (Model, init, Action, update, view, setIssues) where
+module Components.Catalog (Model, init, Action, update, Context, view, setIssues) where
 
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
-import Store.Issues as Issues exposing (Issue)
 
 import CommonTypes exposing (Slug)
+import Store.Issues as Issues exposing (Issue)
+import Route exposing (Route)
 
 
 type alias Model =
@@ -63,13 +64,19 @@ clip model =
     }
 
 
-view : Address Action -> Model -> Html
-view address model =
+type alias Context =
+  { route : Route
+  , setRouteAddress : Address Route
+  }
+
+
+view : Address Action -> Context -> Model -> Html
+view address context model =
   H.div
     [ HA.class "catalog" ]
     [ H.ul
         []
-        ( List.map (viewIssue address) model.visible )
+        ( List.map (viewIssue address context) model.visible )
     , H.button
         [ HA.disabled (model.position <= 0)
         , HE.onClick address <| Scroll (0 - model.size)
@@ -82,9 +89,20 @@ view address model =
     ]
 
 
-viewIssue : Address Action -> (Slug, Issue) -> Html
-viewIssue address (slug, issue) =
-  H.li
-    [ HA.class "item" ]
-    [ -- TODO: Also show small images
-      H.text <| slug ]
+viewIssue : Address Action -> Context -> (Slug, Issue) -> Html
+viewIssue address context (slug, issue) =
+  let
+    isCurrentRoute = context.route == Route.Issue slug
+  in
+    H.li
+      [ HA.classList
+          [ ("item", True)
+          , ("selected", isCurrentRoute)
+          ]
+      ]
+      [ H.button
+          [ HA.disabled isCurrentRoute
+          , HE.onClick context.setRouteAddress <| Route.Issue slug
+          ]
+          [ H.text <| slug ]
+      ]

@@ -8,6 +8,7 @@ import Effects exposing (Effects, Never)
 import History
 import ElmFire
 
+import Route
 import Store.Shop as Shop
 import Store.Issues as Issues
 import Components.Page as Page
@@ -19,7 +20,6 @@ import Components.Page as Page
 firebaseRoot : ElmFire.Location
 firebaseRoot =
   ElmFire.fromUrl "https://plentifulshop-demo.firebaseio.com/"
-
 
 
 --------------------------------------------------------------------------------
@@ -58,7 +58,6 @@ port runEffects =
 main : Signal Html
 main =
   app.html
-
 
 
 --------------------------------------------------------------------------------
@@ -115,11 +114,15 @@ update action model =
       ( model, Effects.none )
 
     PathChange path ->
-      -- TODO: To be implemented. Just loggin for now
-      always
-        ( model, Effects.none )
-        ( Debug.log "PathChange" path )
-
+      let
+        route =
+          Maybe.withDefault
+            Route.Home
+            (Route.match path)
+      in
+        ( { model | page = Page.setRoute route model.page }
+        , Effects.none
+        )
 
     ShopAction shopAction ->
       let

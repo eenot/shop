@@ -47,7 +47,7 @@ init address location =
   , ElmFire.Dict.getDict
       (syncConfig location)
     |> Task.toResult
-    |> Task.map (QueryResult)
+    |> Task.map QueryResult
     |> Effects.task
   )
 

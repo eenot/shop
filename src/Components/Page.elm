@@ -8,12 +8,16 @@ import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
 import History
 import Html as H exposing (Html)
+import Html.Attributes as HA
 
+import CommonTypes exposing (Slug)
+import Config
 import Route exposing (Route)
 import Store.Shop as Shop
 import Store.Issues as Issues
 import Components.Header as Header
 import Components.Catalog as Catalog
+import Components.Stage as Stage
 
 
 --------------------------------------------------------------------------------
@@ -23,14 +27,24 @@ type alias Model =
   { route : Route
   , header : Header.Model
   , catalog : Catalog.Model
+  , body : Body
+  , issues : Issues.Model
   }
+
+
+type Body
+  = Stage Stage.Model
+  | Missing Slug
+  | None
 
 
 init : ( Model, Effects Action )
 init =
   ( { route = Route.Home
     , header = Header.init
-    , catalog = Catalog.init 6
+    , catalog = Catalog.init
+    , body = None
+    , issues = Issues.noIssues
     }
   , Effects.none
   )
@@ -40,6 +54,7 @@ type Action
   = NoOp
   | HeaderAction Header.Action
   | CatalogAction Catalog.Action
+  | StageAction Stage.Action
   | SetRoute Route
 
 
@@ -56,6 +71,17 @@ update action model =
 
     CatalogAction catalogAction ->
       ( { model | catalog = Catalog.update catalogAction model.catalog }
+      , Effects.none
+      )
+
+    StageAction stageAction ->
+      let body1 =
+        case model.body of
+          Stage stage ->
+            Stage <| Stage.update stageAction stage
+          body -> body
+      in
+      ( { model | body = body1 }
       , Effects.none
       )
 
@@ -85,6 +111,18 @@ view address model =
           (forwardTo address CatalogAction)
           context
           model.catalog
+      , case model.body of
+          Stage stage ->
+            Stage.view
+              (forwardTo address StageAction)
+              {}
+              stage
+          Missing slug ->
+            H.div
+              [ HA.class "waiting" ]
+              [ H.text <| "Waiting for issue content " ++ slug ]
+          None ->
+            H.text ""
       ]
 
 -- TODO: Possibly simpler:
@@ -95,8 +133,37 @@ setShop shop model =
 
 setIssues : Issues.Model -> Model -> Model
 setIssues issues model =
-  { model | catalog = Catalog.setIssues issues model.catalog }
+  { model
+  | issues = issues
+  , catalog = Catalog.setIssues issues model.catalog
+  }
+  |> adaptBody
 
 setRoute : Route -> Model -> Model
 setRoute route model =
-  { model | route = route }
+  { model
+  | route = route
+  , catalog =
+      Catalog.setSize
+        ( if route == Route.All
+          then .showAll Config.catalogSize
+          else .besideStage Config.catalogSize
+        )
+        model.catalog
+  }
+  |> adaptBody
+
+adaptBody : Model -> Model
+adaptBody model =
+  { model
+  | body =
+      case model.route of
+        Route.Issue slug ->
+          case Issues.get slug model.issues of
+            Just issue ->
+              Stage (Stage.init slug issue)
+            Nothing ->
+              Missing slug
+        _ ->
+          None
+  }

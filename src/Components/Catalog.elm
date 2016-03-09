@@ -1,5 +1,5 @@
 module Components.Catalog
-  ( Model, init, Action, update, Context, view
+  ( Model, init, Action, update, view
   , setSize, setIssues
   ) where
 
@@ -10,6 +10,7 @@ import Html.Events as HE
 
 import CommonTypes exposing (Slug)
 import Store.Issues as Issues exposing (Issue)
+import Store.Customer as Customer
 import Route exposing (Route)
 
 
@@ -73,13 +74,15 @@ adaptVisible model =
     }
 
 
-type alias Context =
-  { route : Route
-  , setRouteAddress : Address Route
+type alias Context a =
+  { a
+  | setRouteAddress : Address Route
+  , route : Route
+  , customer : Maybe Customer.Model
   }
 
 
-view : Address Action -> Context -> Model -> Html
+view : Address Action -> Context a -> Model -> Html
 view address context model =
   H.div
     [ HA.class "catalog" ]
@@ -98,7 +101,7 @@ view address context model =
     ]
 
 
-viewIssue : Address Action -> Context -> (Slug, Issue) -> Html
+viewIssue : Address Action -> Context a -> (Slug, Issue) -> Html
 viewIssue address context (slug, issue) =
   let
     isCurrentRoute = context.route == Route.Issue slug

@@ -47,17 +47,15 @@ type Action
 update : Action -> Model -> Model
 update action model =
   case action of
-    QueryResult result ->
-      case result of
+    QueryResult (Err error) ->
+      always model <|
+        Debug.log "Firebase: shop query error" error
+
+    QueryResult (Ok snapshot) ->
+      case JD.decodeValue decoder snapshot.value of
         Err error ->
           always model <|
-            Debug.log "Firebase: shop query error" error
+            Debug.log "Firebase: shop decoding error" error
 
-        Ok snapshot ->
-          case JD.decodeValue decoder snapshot.value of
-            Err error ->
-              always model <|
-                Debug.log "Firebase: shop decoding error" error
-
-            Ok shop ->
-              shop
+        Ok shop ->
+          shop

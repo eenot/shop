@@ -1,0 +1,23 @@
+{
+  "rules": {
+    "shop": {
+        ".read": true
+    },
+    "issues": {
+        ".read": true
+    },
+    "customers": {
+      "$user": {
+        ".read":  "$user == auth.uid",
+        ".write": "$user == auth.uid"
+      }
+    },
+    "content": {
+      "$slug": {
+        "$key": {
+          ".read":  "root.child('customers').child(auth.uid).child('purchases').child($slug).val() == $key"
+        }
+      }
+    }
+  }
+}

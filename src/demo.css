@@ -1,0 +1,21 @@
+
+.header, .catalog, .stage, .checkout {
+  padding: 4px;
+}
+
+.header {
+  border: solid 2px blue;
+}
+
+.catalog {
+  border: solid 2px orange;
+}
+
+.stage {
+  border: solid 2px green;
+}
+
+.checkout {
+  border: solid 2px red;
+}
+

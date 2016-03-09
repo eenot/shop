@@ -10,8 +10,6 @@ import Effects exposing (Effects, Never)
 import Json.Encode as JE
 import Json.Decode as JD exposing ((:=))
 
-import Debug
-
 import ElmFire
 import ElmFire.Dict
 

@@ -6,6 +6,7 @@ import Html.Attributes as HA
 import Html.Events as HE
 
 import Store.Shop as Shop
+import Store.Customer as Customer
 import Route exposing (Route)
 
 
@@ -27,26 +28,48 @@ update action model =
   model
 
 
-type alias Context =
-  { route : Route
-  , setRouteAddress : Address Route
+type alias Context a =
+  { a
+  | setRouteAddress : Address Route
+  , signOutAddress : Address ()
+  , route : Route
+  , customer : Maybe Customer.Model
   }
 
 
-view : Address Action -> Context -> Model -> Html
+view : Address Action -> Context a -> Model -> Html
 view address context model =
   H.div
     [ HA.class "header" ]
     [ H.div
         [ HA.class "shop-name" ]
         [ H.text model.shopName ]
+    , case context.customer of
+        Just customer ->
+          H.div
+            [ HA.class "email" ]
+            [ H.text customer.email ]
+        Nothing ->
+          H.text ""
     , H.div
         [ HA.class "menu" ]
         [ H.button
             [ HA.disabled (context.route == Route.All)
-            , HE.onClick context.setRouteAddress <| Route.All
+            , HE.onClick context.setRouteAddress Route.All
             ]
             [ H.text "All issues" ]
+        , case context.customer of
+            Just customer ->
+              H.button
+                [ HE.onClick context.signOutAddress ()
+                ]
+                [ H.text "Sign-out" ]
+            Nothing ->
+              H.button
+                [ -- TODO: Scroll down to sign-in-form
+                  -- HE.onClick context.setRouteAddress Route.All
+                ]
+                [ H.text "Sign-in" ]
         ]
     ]
 

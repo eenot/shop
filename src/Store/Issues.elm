@@ -13,7 +13,7 @@ import Json.Decode as JD exposing ((:=))
 import ElmFire
 import ElmFire.Dict
 
-import CommonTypes exposing (Slug)
+import Types exposing (Slug)
 
 --------------------------------------------------------------------------------
 

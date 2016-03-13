@@ -64,6 +64,16 @@ main =
 
 --------------------------------------------------------------------------------
 
+-- Use auxiliary JS code to set the focus to sign-in email field
+
+focusSignIn : Mailbox ()
+focusSignIn = mailbox ()
+
+port runFocusSignIn : Signal ()
+port runFocusSignIn = focusSignIn.signal
+
+--------------------------------------------------------------------------------
+
 
 type alias Model =
   { shop : Shop.Model
@@ -187,5 +197,6 @@ view address model =
     []
     [ Page.view
         (forwardTo address PageAction)
+        { focusSignInAddress = focusSignIn.address }
         model.page
     ]

@@ -30,7 +30,8 @@ update action model =
 
 type alias Context a =
   { a
-  | setRouteAddress : Address Route
+  | focusSignInAddress : Address ()
+  , setRouteAddress : Address Route
   , signOutAddress : Address ()
   , route : Route
   , customer : Maybe Customer.Model
@@ -66,8 +67,7 @@ view address context model =
                 [ H.text "Sign-out" ]
             Nothing ->
               H.button
-                [ -- TODO: Scroll down to sign-in-form
-                  -- HE.onClick context.setRouteAddress Route.All
+                [ HE.onClick context.focusSignInAddress ()
                 ]
                 [ H.text "Sign-in" ]
         ]

@@ -15,7 +15,22 @@
   border: solid 2px green;
 }
 
+.content {
+  border: solid 2px lightgreen;
+}
+
 .checkout {
   border: solid 2px red;
 }
 
+.catalog .paid::after {
+  content: " cleared"
+}
+
+.catalog .unpaid::after {
+  content: " locked"
+}
+
+.content.fetching::after {
+  content: "(fetching content)"
+}

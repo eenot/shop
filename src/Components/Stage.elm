@@ -15,9 +15,10 @@ import Html.Lazy as HL
 import ElmFire
 
 import Config
-import CommonTypes exposing (..)
+import Types exposing (..)
 import Store.Issues as Issues exposing (Issue)
 import Store.Customer as Customer
+import Store.Content as Content
 import Route exposing (Route)
 import Components.Checkout as Checkout
 
@@ -25,7 +26,7 @@ import Components.Checkout as Checkout
 type alias Model =
   { slug : Slug
   , issue : Issue
-  , content : Maybe String
+  , content : Maybe Content.Model
   , checkout : Maybe Checkout.Model
   }
 
@@ -43,7 +44,7 @@ init slug issue maybeCustomer =
 
 type Action
   = CheckoutAction Checkout.Action
-  | QueryContentResult (Result ElmFire.Error ElmFire.Snapshot)
+  | ContentAction Content.Action
 
 
 type alias Context =
@@ -74,19 +75,14 @@ update context action model =
         Nothing ->
           ( model, Effects.none )
 
-    QueryContentResult (Err error) ->
-      always ( model, Effects.none )
-        <| Debug.log "Firebase: content query error" error
-
-    QueryContentResult (Ok snapshot) ->
-      case JD.decodeValue decoderContentBody snapshot.value of
-        Err error ->
-          always ( model, Effects.none ) <|
-            Debug.log "Firebase: content decoding error" error
-        Ok htmlBody ->
-          ( { model | content = Just htmlBody }
+    ContentAction contentAction ->
+      case model.content of
+        Just content ->
+          ( { model | content = Just (Content.update contentAction content) }
           , Effects.none
           )
+        Nothing ->
+          ( model, Effects.none )
 
 
 customerChanged : Maybe Customer.Model -> Model -> ( Model, Effects Action )
@@ -99,9 +95,16 @@ customerChanged maybeCustomer model =
             Just content ->
               ( model, Effects.none )
             Nothing ->
-              ( { model | content = Just "<div>(fetching content)</div>" }
-              , fetchContent model.slug issueKey
-              )
+              let
+                ( contentModel, contentEffects ) =
+                  Content.init
+                    ( ElmFire.fromUrl Config.firebaseUrl |> ElmFire.sub "content" )
+                    model.slug
+                    issueKey
+              in
+                ( { model | content = Just contentModel }
+                , Effects.map ContentAction contentEffects
+                )
         Nothing ->
           ( { model | content = Nothing }
           , Effects.none
@@ -110,20 +113,6 @@ customerChanged maybeCustomer model =
       ( { model | content = Nothing }
       , Effects.none
       )
-
-fetchContent : Slug -> IssueKey -> Effects Action
-fetchContent slug issueKey =
-  ElmFire.once
-    ( ElmFire.valueChanged ElmFire.noOrder )
-    ( ElmFire.fromUrl Config.firebaseUrl
-        |> ElmFire.sub "content"
-        |> ElmFire.sub slug
-        |> ElmFire.sub issueKey
-    )
-    |> Task.toResult
-    |> Task.map QueryContentResult
-    |> Effects.task
-
 
 view : Address Action -> Model -> Html
 view =
@@ -154,11 +143,15 @@ viewThunk address model =
         Nothing ->
           H.text ""
     , case model.content of
-        Just htmlString ->
+        Just (Just content) ->
           H.div
-            [ HA.class "teaser"
-            , HA.property "innerHTML" <| JE.string htmlString
+            [ HA.class "content"
+            , HA.property "innerHTML" <| JE.string content
             ]
+            []
+        Just Nothing ->
+          H.div
+            [ HA.class "content fetching" ]
             []
         Nothing ->
           H.text ""

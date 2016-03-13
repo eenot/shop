@@ -13,12 +13,12 @@ import ElmFire
 import ElmFire.Auth
 
 import Form exposing (Form)
-import Form.Validate exposing (Validation, (:=))
+import Form.Validate exposing (Validation)
 import Form.Field exposing (Field)
 import Form.Input
 
 import Config
-import CommonTypes exposing (Slug)
+import Types exposing (Slug)
 import Store.Customer as Customer
 
 
@@ -35,19 +35,18 @@ type alias SignInData =
 validateSignIn : Validation () SignInData
 validateSignIn =
   Form.Validate.form2 SignInData
-    ("email" := Form.Validate.email)
-    ("password" := Form.Validate.string)
+    (Form.Validate.get "email" Form.Validate.email)
+    (Form.Validate.get "password" Form.Validate.string)
 
 
 init : Model
 init =
   { signInForm =
       Form.initial
-        [ ("email", Form.Field.text "")
-        , ("password", Form.Field.text "")
+        [ ("email", Form.Field.Text "")
+        , ("password", Form.Field.Text "")
         ]
         validateSignIn
-      |> Form.update Form.validate
   }
 
 
@@ -108,17 +107,20 @@ view address model =
     valid = Form.getErrors form |> List.isEmpty
   in
   H.div
-    [ HA.class "checkout" ]
+    [ HA.class "checkout"
+    , HA.id "checkout"
+    ]
     [ H.div
         [ HA.class "login" ]
         [ H.form
-            [ HA.name "login" -- TODO: necessary?
+            [ HA.name "login"
             ]
             [ Form.Input.textInput
                 emailState
                 formAddress
                 [ HA.class "email"
                 , HA.placeholder "email"
+                , HA.id "email"
                 ]
             , errorFor emailState
             , Form.Input.textInput

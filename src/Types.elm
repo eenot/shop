@@ -1,4 +1,4 @@
-module CommonTypes (..) where
+module Types (..) where
 
 
 type alias Slug = String

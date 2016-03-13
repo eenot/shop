@@ -13,7 +13,7 @@ import Html.Attributes as HA
 import ElmFire
 import ElmFire.Auth
 
-import CommonTypes exposing (Slug)
+import Types exposing (Slug)
 import Config
 import Route exposing (Route)
 import Store.Shop as Shop
@@ -175,11 +175,17 @@ update action model =
       in
         ( model, Effects.none )
 
-view : Address Action -> Model -> Html
-view address model =
+type alias Context a =
+  { a
+  | focusSignInAddress : Address ()
+  }
+
+view : Address Action -> Context a -> Model -> Html
+view address context model =
   let
-    context =
-      { setRouteAddress = forwardTo address SetRoute
+    subContext =
+      { focusSignInAddress = context.focusSignInAddress
+      , setRouteAddress = forwardTo address SetRoute
       , signOutAddress = forwardTo address SignOut
       , route = model.route
       , customer = model.customer
@@ -189,11 +195,11 @@ view address model =
       []
       [ Header.view
           (forwardTo address HeaderAction)
-          context
+          subContext
           model.header
       , Catalog.view
           (forwardTo address CatalogAction)
-          context
+          subContext
           model.catalog
       , case model.body of
           Stage stage ->

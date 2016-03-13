@@ -1,6 +1,6 @@
 module Components.Page
   ( Model, init, Action, update, view
-  , setShop, setIssues, setRoute
+  , setShop, setIssues, setRoute, setCustomer
   ) where
 
 import Signal exposing (Mailbox, Address, mailbox, message, forwardTo)
@@ -10,11 +10,15 @@ import History
 import Html as H exposing (Html)
 import Html.Attributes as HA
 
+import ElmFire
+import ElmFire.Auth
+
 import CommonTypes exposing (Slug)
 import Config
 import Route exposing (Route)
 import Store.Shop as Shop
 import Store.Issues as Issues
+import Store.Customer as Customer
 import Components.Header as Header
 import Components.Catalog as Catalog
 import Components.Stage as Stage
@@ -24,11 +28,13 @@ import Components.Stage as Stage
 
 
 type alias Model =
-  { route : Route
+  { address : Address Action
+  , route : Route
   , header : Header.Model
   , catalog : Catalog.Model
   , body : Body
   , issues : Issues.Model
+  , customer : Maybe Customer.Model
   }
 
 
@@ -38,24 +44,36 @@ type Body
   | None
 
 
-init : ( Model, Effects Action )
-init =
-  ( { route = Route.Home
+init : Address Action -> ( Model, Effects Action )
+init address =
+  ( { address = address
+    , route = Route.Home
     , header = Header.init
     , catalog = Catalog.init
     , body = None
     , issues = Issues.noIssues
+    , customer = Nothing
     }
-  , Effects.none
+  , ElmFire.Auth.subscribeAuth
+      ( \authMaybe -> Signal.send address (AuthChange authMaybe) )
+      (ElmFire.fromUrl Config.firebaseUrl)
+    |> Task.toResult
+    |> Task.map (LogElmFireError "Firebase: subscribing to authentication state error")
+    |> Effects.task
   )
 
 
 type Action
   = NoOp
+  | CustomerAction Customer.Action
   | HeaderAction Header.Action
   | CatalogAction Catalog.Action
   | StageAction Stage.Action
   | SetRoute Route
+  | AuthChange (Maybe ElmFire.Auth.Authentication)
+  | LogElmFireError String (Result ElmFire.Error ())
+  | SignOut ()
+
 
 
 update : Action -> Model -> ( Model, Effects Action )
@@ -63,6 +81,32 @@ update action model =
   case action of
     NoOp ->
       ( model, Effects.none )
+
+    CustomerAction customerAction ->
+      let
+        customerModel =
+          Maybe.map
+            (Customer.update customerAction)
+            model.customer
+        ( bodyModel, bodyEffects ) =
+          case model.body of
+            Stage stage ->
+              let
+                ( stageModel, stageEffects ) =
+                  Stage.customerChanged customerModel stage
+              in
+                ( Stage stageModel
+                , Effects.map StageAction stageEffects
+                )
+            otherBody ->
+              ( otherBody, Effects.none )
+      in
+        ( { model
+          | customer = customerModel
+          , body = bodyModel
+          }
+        , bodyEffects
+        )
 
     HeaderAction headerAction ->
       ( { model | header = Header.update headerAction model.header }
@@ -75,15 +119,17 @@ update action model =
       )
 
     StageAction stageAction ->
-      let body1 =
-        case model.body of
-          Stage stage ->
-            Stage <| Stage.update stageAction stage
-          body -> body
-      in
-      ( { model | body = body1 }
-      , Effects.none
-      )
+      case model.body of
+        Stage stage ->
+          let
+            ( stageModel, stageEffects ) =
+              Stage.update { customer = model.customer } stageAction stage
+          in
+            ( { model | body = Stage stageModel }
+            , Effects.map StageAction stageEffects
+            )
+        body ->
+          ( model, Effects.none )
 
     SetRoute route ->
       ( model
@@ -92,13 +138,51 @@ update action model =
           |> Effects.task
       )
 
+    SignOut () ->
+      ( model
+      , ElmFire.Auth.unauthenticate
+          (ElmFire.fromUrl Config.firebaseUrl)
+        |> Task.toResult
+        |> Task.map (LogElmFireError "Firebase: unauthentication error")
+        |> Effects.task
+      )
+
+    AuthChange Nothing ->
+      ( { model | customer = Nothing }
+      , Effects.none
+      )
+
+    AuthChange (Just authentication) ->
+      let
+        ( customerModel, customerEffects ) =
+          Customer.init
+            ( forwardTo model.address CustomerAction )
+            ( ElmFire.fromUrl Config.firebaseUrl
+               |> ElmFire.sub "customers"
+            )
+            authentication.uid
+      in
+        ( { model | customer = Just customerModel }
+        , Effects.map CustomerAction customerEffects
+        )
+
+    LogElmFireError description subscriptionResult ->
+      let _ = case subscriptionResult of
+        Err error ->
+          always () <| Debug.log
+            description error
+        Ok () -> ()
+      in
+        ( model, Effects.none )
 
 view : Address Action -> Model -> Html
 view address model =
   let
     context =
-      { route = model.route
-      , setRouteAddress = forwardTo address SetRoute
+      { setRouteAddress = forwardTo address SetRoute
+      , signOutAddress = forwardTo address SignOut
+      , route = model.route
+      , customer = model.customer
       }
   in
     H.div
@@ -115,7 +199,6 @@ view address model =
           Stage stage ->
             Stage.view
               (forwardTo address StageAction)
-              {}
               stage
           Missing slug ->
             H.div
@@ -131,7 +214,7 @@ setShop : Shop.Model -> Model -> Model
 setShop shop model =
   { model | header = Header.setShop shop model.header }
 
-setIssues : Issues.Model -> Model -> Model
+setIssues : Issues.Model -> Model -> ( Model, Effects Action )
 setIssues issues model =
   { model
   | issues = issues
@@ -139,7 +222,7 @@ setIssues issues model =
   }
   |> adaptBody
 
-setRoute : Route -> Model -> Model
+setRoute : Route -> Model -> ( Model, Effects Action )
 setRoute route model =
   { model
   | route = route
@@ -153,17 +236,30 @@ setRoute route model =
   }
   |> adaptBody
 
-adaptBody : Model -> Model
+setCustomer : Maybe Customer.Model -> Model -> Model
+setCustomer customer model =
+  { model | customer = customer }
+
+adaptBody : Model -> ( Model, Effects Action )
 adaptBody model =
-  { model
-  | body =
+  let
+    ( bodyModel, bodyEffects ) =
       case model.route of
         Route.Issue slug ->
           case Issues.get slug model.issues of
             Just issue ->
-              Stage (Stage.init slug issue)
+              let
+                ( stageModel, stageEffects ) =
+                  Stage.init slug issue model.customer
+              in
+                ( Stage stageModel
+                , Effects.map StageAction stageEffects
+                )
             Nothing ->
-              Missing slug
+              ( Missing slug, Effects.none )
         _ ->
-          None
-  }
+          ( None, Effects.none )
+  in
+    ( { model | body = bodyModel }
+    , bodyEffects
+    )

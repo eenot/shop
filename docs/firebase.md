@@ -11,7 +11,6 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
     - ...
 - customers
     - _uid_
-        - displayName: _String_
         - email: _String_
         - paymentData
             - id: _String_
@@ -42,6 +41,8 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
 
 ## Permissions
 
+See [`fb-rules.json`](fb-rules.json)
+
 - `/shop`  
   readable to anyone
 - `/customers/$uid`  
@@ -49,7 +50,7 @@ author: Thomas Weiser <elmdev@thomasweiser.de>
 - `/issues`  
   readable to anyone
 - `/content/$slug/$key`  
-  readable if `$key == /customers/$uid/purchases/$slug/$key`
+  readable if `$key == /customers/$uid/purchases/$slug`
 - `/purchases/$uid`  
   writable for user `$uid`
 

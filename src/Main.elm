@@ -12,6 +12,7 @@ import Config
 import Route
 import Store.Shop as Shop
 import Store.Issues as Issues
+import Store.Customer as Customer
 import Components.Page as Page
 
 
@@ -66,7 +67,8 @@ main =
 
 type alias Model =
   { shop : Shop.Model
-  , issues: Issues.Model
+  , issues : Issues.Model
+  , customer : Maybe Customer.Model
   , page : Page.Model
   }
 
@@ -75,18 +77,20 @@ init : String -> ( Model, Effects Action )
 init initialPath =
   let
     ( shopModel, shopEffects ) =
-        Shop.init
-          (firebaseRoot |> ElmFire.sub "shop")
+      Shop.init
+        (firebaseRoot |> ElmFire.sub "shop")
     ( issuesModel, issuesEffects ) =
-        Issues.init
-          (forwardTo serverInput.address IssuesAction)
-          (firebaseRoot |> ElmFire.sub "issues")
-    ( pageModel, pageEffects ) = Page.init
+      Issues.init
+        (forwardTo serverInput.address IssuesAction)
+        (firebaseRoot |> ElmFire.sub "issues")
+    ( pageModel, pageEffects ) =
+      Page.init (forwardTo serverInput.address PageAction)
     ( model, effects ) =
       update
         ( PathChange initialPath )
         { shop = shopModel
         , issues = issuesModel
+        , customer = Nothing
         , page = pageModel
         }
   in
@@ -105,6 +109,7 @@ type Action
   | PathChange String
   | ShopAction Shop.Action
   | IssuesAction Issues.Action
+  | CustomerAction Customer.Action
   | PageAction Page.Action
 
 
@@ -120,9 +125,11 @@ update action model =
           Maybe.withDefault
             Route.Home
             (Route.match path)
+        ( pageModel, pageEffects ) =
+          Page.setRoute route model.page
       in
-        ( { model | page = Page.setRoute route model.page }
-        , Effects.none
+        ( { model | page = pageModel }
+        , Effects.map PageAction pageEffects
         )
 
     ShopAction shopAction ->
@@ -138,11 +145,26 @@ update action model =
 
     IssuesAction issuesAction ->
       let
-        issuesModel = Issues.update issuesAction model.issues
+        issuesModel =
+          Issues.update issuesAction model.issues
+        ( pageModel, pageEffects ) =
+          Page.setIssues issuesModel model.page
       in
         ( { model
             | issues = issuesModel
-            , page = Page.setIssues issuesModel model.page
+            , page = pageModel
+          }
+        , Effects.map PageAction pageEffects
+        )
+
+    CustomerAction customerAction ->
+      let
+        customerModel =
+          Maybe.map (Customer.update customerAction) model.customer
+      in
+        ( { model
+            | customer = customerModel
+            , page = Page.setCustomer customerModel model.page
           }
         , Effects.none
         )

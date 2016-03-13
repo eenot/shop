@@ -88,7 +88,9 @@ view address context model =
   H.div
     [ HA.class "catalog" ]
     [ H.ul
-        []
+      [ HA.classList
+          [ ("signed-in", context.customer /= Nothing) ]
+      ]
         ( List.map (viewIssue address context) model.visible )
     , H.button
         [ HA.disabled (model.position <= 0)

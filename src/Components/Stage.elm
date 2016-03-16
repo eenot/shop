@@ -52,13 +52,6 @@ type alias Context =
   }
 
 
-decoderContentBody : JD.Decoder String
-decoderContentBody =
-  JD.object1 -- TODO Simpler?
-    identity
-    ("body" := JD.string)
-
-
 update : Context -> Action -> Model -> ( Model, Effects Action )
 update context action model =
   case action of

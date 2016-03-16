@@ -1,6 +1,6 @@
 module Components.Page
   ( Model, init, Action, update, view
-  , setShop, setIssues, setRoute, setCustomer
+  , setIssues, setRoute, setCustomer
   ) where
 
 import Signal exposing (Mailbox, Address, mailbox, message, forwardTo)
@@ -178,6 +178,7 @@ update action model =
 type alias Context a =
   { a
   | focusSignInAddress : Address ()
+  , shop : Shop.Model
   }
 
 view : Address Action -> Context a -> Model -> Html
@@ -187,6 +188,7 @@ view address context model =
       { focusSignInAddress = context.focusSignInAddress
       , setRouteAddress = forwardTo address SetRoute
       , signOutAddress = forwardTo address SignOut
+      , shop = context.shop
       , route = model.route
       , customer = model.customer
       }
@@ -213,12 +215,6 @@ view address context model =
           None ->
             H.text ""
       ]
-
--- TODO: Possibly simpler:
---   Don't include shopName in local model. Give it as a context to view function instead.
-setShop : Shop.Model -> Model -> Model
-setShop shop model =
-  { model | header = Header.setShop shop model.header }
 
 setIssues : Issues.Model -> Model -> ( Model, Effects Action )
 setIssues issues model =

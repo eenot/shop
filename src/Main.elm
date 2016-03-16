@@ -143,15 +143,9 @@ update action model =
         )
 
     ShopAction shopAction ->
-      let
-        shopModel = Shop.update shopAction model.shop
-      in
-        ( { model
-            | shop = shopModel
-            , page = Page.setShop shopModel model.page
-          }
-        , Effects.none
-        )
+      ( { model | shop = Shop.update shopAction model.shop }
+      , Effects.none
+      )
 
     IssuesAction issuesAction ->
       let
@@ -197,6 +191,8 @@ view address model =
     []
     [ Page.view
         (forwardTo address PageAction)
-        { focusSignInAddress = focusSignIn.address }
+        { focusSignInAddress = focusSignIn.address
+        , shop = model.shop
+        }
         model.page
     ]

@@ -3,7 +3,7 @@
   padding: 4px;
 }
 
-.header {
+.header, .footer {
   border: solid 2px blue;
 }
 
@@ -21,6 +21,26 @@
 
 .checkout {
   border: solid 2px red;
+}
+
+.checkout.busy {
+  filter: opacity(50%);
+  -webkit-filter: opacity(50%);
+  cursor: progress;
+}
+
+.checkout .error {
+  background-color: darkred;
+  color: white;
+  padding: 2px;
+}
+
+.checkout .debug {
+  border: solid 2px greenyellow;
+}
+
+.checkout .debug::before {
+  content: "Debug: "
 }
 
 .catalog .paid::after {

@@ -67,10 +67,12 @@ view address context model =
                 ]
                 [ H.text "Sign-out" ]
             Nothing ->
-              H.button
-                [ HE.onClick context.focusSignInAddress ()
-                ]
-                [ H.text "Sign-in" ]
+              case context.route of
+                Route.Issue _ ->
+                  H.button
+                    [ HE.onClick context.focusSignInAddress () ]
+                    [ H.text "Sign-in" ]
+                _ ->
+                  H.text ""
         ]
     ]
-

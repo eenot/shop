@@ -47,7 +47,7 @@ update action model =
       case JD.decodeValue decoder snapshot.value of
         Err error ->
           always Nothing <|
-            Debug.log "Firebase: shop decoding error" error
+            Debug.log "Firebase: content decoding error" error
 
         Ok body ->
           Just body

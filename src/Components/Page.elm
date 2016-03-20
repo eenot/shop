@@ -1,6 +1,6 @@
 module Components.Page
   ( Model, init, Action, update, view
-  , setIssues, setRoute, setCustomer
+  , setIssues, setRoute, setCustomer, stripeResponse
   ) where
 
 import Signal exposing (Mailbox, Address, mailbox, message, forwardTo)
@@ -22,6 +22,7 @@ import Store.Customer as Customer
 import Components.Header as Header
 import Components.Catalog as Catalog
 import Components.Stage as Stage
+import Components.Footer  as Footer
 
 
 --------------------------------------------------------------------------------
@@ -75,9 +76,13 @@ type Action
   | SignOut ()
 
 
+type alias UpdateContext =
+  { stripeRequestsAddress : Address Types.StripeRequest
+  }
 
-update : Action -> Model -> ( Model, Effects Action )
-update action model =
+
+update : UpdateContext -> Action -> Model -> ( Model, Effects Action )
+update context action model =
   case action of
     NoOp ->
       ( model, Effects.none )
@@ -123,7 +128,11 @@ update action model =
         Stage stage ->
           let
             ( stageModel, stageEffects ) =
-              Stage.update { customer = model.customer } stageAction stage
+              Stage.update
+                { stripeRequestsAddress = context.stripeRequestsAddress
+                , customer = model.customer
+                }
+                stageAction stage
           in
             ( { model | body = Stage stageModel }
             , Effects.map StageAction stageEffects
@@ -175,13 +184,13 @@ update action model =
       in
         ( model, Effects.none )
 
-type alias Context a =
+type alias ViewContext a =
   { a
   | focusSignInAddress : Address ()
   , shop : Shop.Model
   }
 
-view : Address Action -> Context a -> Model -> Html
+view : Address Action -> ViewContext a -> Model -> Html
 view address context model =
   let
     subContext =
@@ -207,6 +216,7 @@ view address context model =
           Stage stage ->
             Stage.view
               (forwardTo address StageAction)
+              { customer = model.customer }
               stage
           Missing slug ->
             H.div
@@ -214,6 +224,7 @@ view address context model =
               [ H.text <| "Waiting for issue content " ++ slug ]
           None ->
             H.text ""
+      , Footer.view
       ]
 
 setIssues : Issues.Model -> Model -> ( Model, Effects Action )
@@ -241,6 +252,14 @@ setRoute route model =
 setCustomer : Maybe Customer.Model -> Model -> Model
 setCustomer customer model =
   { model | customer = customer }
+
+stripeResponse : Types.StripeResponse -> Model -> Model
+stripeResponse response model =
+  case model.body of
+    Stage stage ->
+      { model | body = Stage <| Stage.stripeResponse response stage }
+    _ ->
+      model
 
 adaptBody : Model -> ( Model, Effects Action )
 adaptBody model =

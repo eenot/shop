@@ -21,6 +21,7 @@ type alias Model = Dict Slug Issue
 
 type alias Issue =
   { title : String
+  , price : Float
   , teaser : Maybe String
   }
 
@@ -38,6 +39,7 @@ syncConfig location =
       -- Encoding not in use for now, but let's give an encoder anyway.
       \issue -> JE.object
         [ ( "title", JE.string issue.title )
+        , ( "price", JE.float issue.price )
         , ( "teaser"
           , case issue.teaser of
               Just teaser -> JE.string teaser
@@ -45,8 +47,9 @@ syncConfig location =
           )
         ]
   , decoder =
-      ( JD.object2 Issue
+      ( JD.object3 Issue
           ( "title" := JD.string )
+          ( "price" := JD.float )
           ( JD.maybe ("teaser" := JD.string) )
       )
   }

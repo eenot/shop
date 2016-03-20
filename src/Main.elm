@@ -8,6 +8,7 @@ import Effects exposing (Effects, Never)
 import History
 import ElmFire
 
+import Types
 import Config
 import Route
 import Store.Shop as Shop
@@ -35,6 +36,7 @@ appConfig =
   , inputs =
       [ serverInput.signal
       , Signal.map PathChange History.path
+      , Signal.map StripeResponse stripeResponses
       ]
   }
 
@@ -71,6 +73,18 @@ focusSignIn = mailbox ()
 
 port runFocusSignIn : Signal ()
 port runFocusSignIn = focusSignIn.signal
+
+--------------------------------------------------------------------------------
+
+-- Communication with Stripe.js
+
+stripeRequestsBox : Mailbox Types.StripeRequest
+stripeRequestsBox = mailbox { request = "none", args = [] }
+
+port runStripeRequests : Signal Types.StripeRequest
+port runStripeRequests = stripeRequestsBox.signal
+
+port stripeResponses : Signal Types.StripeResponse
 
 --------------------------------------------------------------------------------
 
@@ -117,6 +131,7 @@ init initialPath =
 type Action
   = NoOp
   | PathChange String
+  | StripeResponse Types.StripeResponse
   | ShopAction Shop.Action
   | IssuesAction Issues.Action
   | CustomerAction Customer.Action
@@ -141,6 +156,11 @@ update action model =
         ( { model | page = pageModel }
         , Effects.map PageAction pageEffects
         )
+
+    StripeResponse response ->
+      ( { model | page = Page.stripeResponse response model.page }
+      , Effects.none
+      )
 
     ShopAction shopAction ->
       ( { model | shop = Shop.update shopAction model.shop }
@@ -176,7 +196,10 @@ update action model =
     PageAction pageAction ->
       let
         ( pageModel, pageEffects ) =
-          Page.update pageAction model.page
+          Page.update
+            { stripeRequestsAddress = stripeRequestsBox.address }
+            pageAction
+            model.page
       in
         ( { model
             | page = pageModel

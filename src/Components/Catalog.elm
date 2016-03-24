@@ -3,12 +3,13 @@ module Components.Catalog
   , setSize, setIssues
   ) where
 
+import Dict exposing (Dict)
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 
-import CommonTypes exposing (Slug)
+import Types exposing (Slug)
 import Store.Issues as Issues exposing (Issue)
 import Store.Customer as Customer
 import Route exposing (Route)
@@ -87,7 +88,9 @@ view address context model =
   H.div
     [ HA.class "catalog" ]
     [ H.ul
-        []
+      [ HA.classList
+          [ ("signed-in", context.customer /= Nothing) ]
+      ]
         ( List.map (viewIssue address context) model.visible )
     , H.button
         [ HA.disabled (model.position <= 0)
@@ -105,11 +108,19 @@ viewIssue : Address Action -> Context a -> (Slug, Issue) -> Html
 viewIssue address context (slug, issue) =
   let
     isCurrentRoute = context.route == Route.Issue slug
+    paid =
+      case context.customer of
+        Just { purchases } ->
+          Just (Dict.member slug purchases)
+        Nothing ->
+          Nothing
   in
     H.li
       [ HA.classList
           [ ("item", True)
           , ("selected", isCurrentRoute)
+          , ("paid", paid == Just True)
+          , ("unpaid", paid == Just False)
           ]
       ]
       [ H.button

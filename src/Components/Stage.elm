@@ -1,31 +1,28 @@
 module Components.Stage
   ( Model, init, Action, update, view
-  , customerChanged
+  , customerChanged, stripeResponse
   ) where
 
 import Signal exposing (Address, forwardTo)
-import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
 import Json.Encode as JE
-import Json.Decode as JD exposing ((:=))
 import Html as H exposing (Html)
 import Html.Attributes as HA
-import Html.Events as HE
 import Html.Lazy as HL
 import ElmFire
 
 import Config
-import CommonTypes exposing (..)
+import Types exposing (..)
 import Store.Issues as Issues exposing (Issue)
 import Store.Customer as Customer
-import Route exposing (Route)
+import Store.Content as Content
 import Components.Checkout as Checkout
 
 
 type alias Model =
   { slug : Slug
   , issue : Issue
-  , content : Maybe String
+  , content : Maybe Content.Model
   , checkout : Maybe Checkout.Model
   }
 
@@ -43,22 +40,16 @@ init slug issue maybeCustomer =
 
 type Action
   = CheckoutAction Checkout.Action
-  | QueryContentResult (Result ElmFire.Error ElmFire.Snapshot)
+  | ContentAction Content.Action
 
 
-type alias Context =
-  { customer : Maybe Customer.Model
+type alias UpdateContext =
+  { stripeRequestsAddress : Address Types.StripeRequest
+  , customer : Maybe Customer.Model
   }
 
 
-decoderContentBody : JD.Decoder String
-decoderContentBody =
-  JD.object1 -- TODO Simpler?
-    identity
-    ("body" := JD.string)
-
-
-update : Context -> Action -> Model -> ( Model, Effects Action )
+update : UpdateContext -> Action -> Model -> ( Model, Effects Action )
 update context action model =
   case action of
     CheckoutAction checkoutAction ->
@@ -66,7 +57,13 @@ update context action model =
         Just checkout ->
           let
             ( checkoutModel, checkoutEffects ) =
-              Checkout.update context checkoutAction checkout
+              Checkout.update
+                { stripeRequestsAddress = context.stripeRequestsAddress
+                , slug = model.slug
+                , issue = model.issue
+                , customer = context.customer
+                }
+                checkoutAction checkout
           in
           ( { model | checkout = Just checkoutModel }
           , Effects.map CheckoutAction checkoutEffects
@@ -74,63 +71,85 @@ update context action model =
         Nothing ->
           ( model, Effects.none )
 
-    QueryContentResult (Err error) ->
-      always ( model, Effects.none )
-        <| Debug.log "Firebase: content query error" error
-
-    QueryContentResult (Ok snapshot) ->
-      case JD.decodeValue decoderContentBody snapshot.value of
-        Err error ->
-          always ( model, Effects.none ) <|
-            Debug.log "Firebase: content decoding error" error
-        Ok htmlBody ->
-          ( { model | content = Just htmlBody }
+    ContentAction contentAction ->
+      case model.content of
+        Just content ->
+          ( { model | content = Just (Content.update contentAction content) }
           , Effects.none
           )
+        Nothing ->
+          ( model, Effects.none )
 
 
 customerChanged : Maybe Customer.Model -> Model -> ( Model, Effects Action )
 customerChanged maybeCustomer model =
-  case maybeCustomer of
-    Just customer ->
-      case Customer.getIssueKey model.slug customer of
-        Just issueKey ->
-          case model.content of
-            Just content ->
-              ( model, Effects.none )
+  let
+    addCheckout model =
+      case model.checkout of
+        Just _ -> model
+        Nothing -> { model | checkout = Just Checkout.init }
+
+    ( model1, effects1 ) =
+      case maybeCustomer of
+        Just customer ->
+          case Customer.getIssueKey model.slug customer of
+            Just issueKey ->
+              case model.content of
+                Just content ->
+                  ( model, Effects.none )
+                Nothing ->
+                  let
+                    ( contentModel, contentEffects ) =
+                      Content.init
+                        ( ElmFire.fromUrl Config.firebaseUrl |> ElmFire.sub "content" )
+                        model.slug
+                        issueKey
+                  in
+                    ( { model
+                      | content = Just contentModel
+                      , checkout = Nothing
+                      }
+                    , Effects.map ContentAction contentEffects
+                    )
             Nothing ->
-              ( { model | content = Just "<div>(fetching content)</div>" }
-              , fetchContent model.slug issueKey
+              ( addCheckout { model | content = Nothing }
+              , Effects.none
               )
         Nothing ->
-          ( { model | content = Nothing }
+          ( addCheckout { model | content = Nothing }
           , Effects.none
           )
-    Nothing ->
-      ( { model | content = Nothing }
-      , Effects.none
-      )
 
-fetchContent : Slug -> IssueKey -> Effects Action
-fetchContent slug issueKey =
-  ElmFire.once
-    ( ElmFire.valueChanged ElmFire.noOrder )
-    ( ElmFire.fromUrl Config.firebaseUrl
-        |> ElmFire.sub "content"
-        |> ElmFire.sub slug
-        |> ElmFire.sub issueKey
-    )
-    |> Task.toResult
-    |> Task.map QueryContentResult
-    |> Effects.task
+    model2 = case model1.checkout of
+      Just checkout ->
+        { model1 | checkout =
+            Just <| Checkout.customerChanged maybeCustomer checkout }
+      Nothing ->
+        model1
+    in
+      ( model2, effects1 )
 
 
-view : Address Action -> Model -> Html
+stripeResponse : Types.StripeResponse -> Model -> Model
+stripeResponse response model =
+  case model.checkout of
+    Just checkout ->
+      { model | checkout = Just <| Checkout.stripeResponse response checkout }
+    _ ->
+      model
+
+
+type alias ViewContext =
+  { customer : Maybe Customer.Model
+  }
+
+
+view : Address Action -> ViewContext -> Model -> Html
 view =
-  HL.lazy2 viewThunk
+  HL.lazy3 viewThunk
 
-viewThunk : Address Action -> Model -> Html
-viewThunk address model =
+viewThunk : Address Action -> ViewContext -> Model -> Html
+viewThunk address context model =
   H.div
     [ HA.class "stage" ]
     [ H.div [ HA.class "title" ] [ H.text model.issue.title ]
@@ -150,15 +169,23 @@ viewThunk address model =
         Just checkout ->
           Checkout.view
             (forwardTo address CheckoutAction)
+            { slug = model.slug
+            , issue = model.issue
+            , customer = context.customer
+            }
             checkout
         Nothing ->
           H.text ""
     , case model.content of
-        Just htmlString ->
+        Just (Just content) ->
           H.div
-            [ HA.class "teaser"
-            , HA.property "innerHTML" <| JE.string htmlString
+            [ HA.class "content"
+            , HA.property "innerHTML" <| JE.string content
             ]
+            []
+        Just Nothing ->
+          H.div
+            [ HA.class "content fetching" ]
             []
         Nothing ->
           H.text ""

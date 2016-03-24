@@ -1,4 +1,4 @@
-module Components.Header (Model, init, Action, update, Context, view, setShop) where
+module Components.Header (Model, init, Action, update, Context, view) where
 
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
@@ -11,12 +11,12 @@ import Route exposing (Route)
 
 
 type alias Model =
-  { shopName : String }
+  {}
 
 
 init : Model
 init =
-  { shopName = "" }
+  {}
 
 
 type alias Action =
@@ -30,8 +30,10 @@ update action model =
 
 type alias Context a =
   { a
-  | setRouteAddress : Address Route
+  | focusSignInAddress : Address ()
+  , setRouteAddress : Address Route
   , signOutAddress : Address ()
+  , shop : Shop.Model
   , route : Route
   , customer : Maybe Customer.Model
   }
@@ -43,7 +45,7 @@ view address context model =
     [ HA.class "header" ]
     [ H.div
         [ HA.class "shop-name" ]
-        [ H.text model.shopName ]
+        [ H.text context.shop.name ]
     , case context.customer of
         Just customer ->
           H.div
@@ -65,17 +67,12 @@ view address context model =
                 ]
                 [ H.text "Sign-out" ]
             Nothing ->
-              H.button
-                [ -- TODO: Scroll down to sign-in-form
-                  -- HE.onClick context.setRouteAddress Route.All
-                ]
-                [ H.text "Sign-in" ]
+              case context.route of
+                Route.Issue _ ->
+                  H.button
+                    [ HE.onClick context.focusSignInAddress () ]
+                    [ H.text "Sign-in" ]
+                _ ->
+                  H.text ""
         ]
     ]
-
-
--- TODO: Possibly simpler:
---   Don't include shopName in local model. Give it as a context to view function instead.
-setShop : Shop.Model -> Model -> Model
-setShop shop model =
-  { model | shopName = shop.name }

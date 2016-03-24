@@ -1,6 +1,6 @@
 module Components.Page
   ( Model, init, Action, update, view
-  , setShop, setIssues, setRoute, setCustomer
+  , setIssues, setRoute, setCustomer, stripeResponse
   ) where
 
 import Signal exposing (Mailbox, Address, mailbox, message, forwardTo)
@@ -13,7 +13,7 @@ import Html.Attributes as HA
 import ElmFire
 import ElmFire.Auth
 
-import CommonTypes exposing (Slug)
+import Types exposing (Slug)
 import Config
 import Route exposing (Route)
 import Store.Shop as Shop
@@ -22,6 +22,7 @@ import Store.Customer as Customer
 import Components.Header as Header
 import Components.Catalog as Catalog
 import Components.Stage as Stage
+import Components.Footer  as Footer
 
 
 --------------------------------------------------------------------------------
@@ -75,9 +76,13 @@ type Action
   | SignOut ()
 
 
+type alias UpdateContext =
+  { stripeRequestsAddress : Address Types.StripeRequest
+  }
 
-update : Action -> Model -> ( Model, Effects Action )
-update action model =
+
+update : UpdateContext -> Action -> Model -> ( Model, Effects Action )
+update context action model =
   case action of
     NoOp ->
       ( model, Effects.none )
@@ -123,7 +128,11 @@ update action model =
         Stage stage ->
           let
             ( stageModel, stageEffects ) =
-              Stage.update { customer = model.customer } stageAction stage
+              Stage.update
+                { stripeRequestsAddress = context.stripeRequestsAddress
+                , customer = model.customer
+                }
+                stageAction stage
           in
             ( { model | body = Stage stageModel }
             , Effects.map StageAction stageEffects
@@ -175,12 +184,20 @@ update action model =
       in
         ( model, Effects.none )
 
-view : Address Action -> Model -> Html
-view address model =
+type alias ViewContext a =
+  { a
+  | focusSignInAddress : Address ()
+  , shop : Shop.Model
+  }
+
+view : Address Action -> ViewContext a -> Model -> Html
+view address context model =
   let
-    context =
-      { setRouteAddress = forwardTo address SetRoute
+    subContext =
+      { focusSignInAddress = context.focusSignInAddress
+      , setRouteAddress = forwardTo address SetRoute
       , signOutAddress = forwardTo address SignOut
+      , shop = context.shop
       , route = model.route
       , customer = model.customer
       }
@@ -189,16 +206,17 @@ view address model =
       []
       [ Header.view
           (forwardTo address HeaderAction)
-          context
+          subContext
           model.header
       , Catalog.view
           (forwardTo address CatalogAction)
-          context
+          subContext
           model.catalog
       , case model.body of
           Stage stage ->
             Stage.view
               (forwardTo address StageAction)
+              { customer = model.customer }
               stage
           Missing slug ->
             H.div
@@ -206,13 +224,8 @@ view address model =
               [ H.text <| "Waiting for issue content " ++ slug ]
           None ->
             H.text ""
+      , Footer.view
       ]
-
--- TODO: Possibly simpler:
---   Don't include shopName in local model. Give it as a context to view function instead.
-setShop : Shop.Model -> Model -> Model
-setShop shop model =
-  { model | header = Header.setShop shop model.header }
 
 setIssues : Issues.Model -> Model -> ( Model, Effects Action )
 setIssues issues model =
@@ -239,6 +252,14 @@ setRoute route model =
 setCustomer : Maybe Customer.Model -> Model -> Model
 setCustomer customer model =
   { model | customer = customer }
+
+stripeResponse : Types.StripeResponse -> Model -> Model
+stripeResponse response model =
+  case model.body of
+    Stage stage ->
+      { model | body = Stage <| Stage.stripeResponse response stage }
+    _ ->
+      model
 
 adaptBody : Model -> ( Model, Effects Action )
 adaptBody model =

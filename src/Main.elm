@@ -8,6 +8,7 @@ import Effects exposing (Effects, Never)
 import History
 import ElmFire
 
+import Types
 import Config
 import Route
 import Store.Shop as Shop
@@ -35,6 +36,7 @@ appConfig =
   , inputs =
       [ serverInput.signal
       , Signal.map PathChange History.path
+      , Signal.map StripeResponse stripeResponses
       ]
   }
 
@@ -61,6 +63,28 @@ main : Signal Html
 main =
   app.html
 
+
+--------------------------------------------------------------------------------
+
+-- Use auxiliary JS code to set the focus to sign-in email field
+
+focusSignIn : Mailbox ()
+focusSignIn = mailbox ()
+
+port runFocusSignIn : Signal ()
+port runFocusSignIn = focusSignIn.signal
+
+--------------------------------------------------------------------------------
+
+-- Communication with Stripe.js
+
+stripeRequestsBox : Mailbox Types.StripeRequest
+stripeRequestsBox = mailbox { request = "none", args = [] }
+
+port runStripeRequests : Signal Types.StripeRequest
+port runStripeRequests = stripeRequestsBox.signal
+
+port stripeResponses : Signal Types.StripeResponse
 
 --------------------------------------------------------------------------------
 
@@ -107,6 +131,7 @@ init initialPath =
 type Action
   = NoOp
   | PathChange String
+  | StripeResponse Types.StripeResponse
   | ShopAction Shop.Action
   | IssuesAction Issues.Action
   | CustomerAction Customer.Action
@@ -132,16 +157,15 @@ update action model =
         , Effects.map PageAction pageEffects
         )
 
+    StripeResponse response ->
+      ( { model | page = Page.stripeResponse response model.page }
+      , Effects.none
+      )
+
     ShopAction shopAction ->
-      let
-        shopModel = Shop.update shopAction model.shop
-      in
-        ( { model
-            | shop = shopModel
-            , page = Page.setShop shopModel model.page
-          }
-        , Effects.none
-        )
+      ( { model | shop = Shop.update shopAction model.shop }
+      , Effects.none
+      )
 
     IssuesAction issuesAction ->
       let
@@ -172,7 +196,10 @@ update action model =
     PageAction pageAction ->
       let
         ( pageModel, pageEffects ) =
-          Page.update pageAction model.page
+          Page.update
+            { stripeRequestsAddress = stripeRequestsBox.address }
+            pageAction
+            model.page
       in
         ( { model
             | page = pageModel
@@ -187,5 +214,8 @@ view address model =
     []
     [ Page.view
         (forwardTo address PageAction)
+        { focusSignInAddress = focusSignIn.address
+        , shop = model.shop
+        }
         model.page
     ]

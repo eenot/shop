@@ -449,7 +449,7 @@ view address context model =
             , H.div
                 [ HA.class "debug" ]
                 [ FI.selectInput
-                  [ ("signIn", "intent: signIn")
+                    [ ("signIn", "intent: signIn")
                     , ("signUp", "intent: signUp")
                     , ("signUpAndBuy", "intent: signUpAndBuy")
                     , ("newCardBuy", "intent: newCardBuy")

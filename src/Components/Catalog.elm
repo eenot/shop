@@ -3,7 +3,6 @@ module Components.Catalog
   , setSize, setIssues
   ) where
 
-import Dict exposing (Dict)
 import Signal exposing (Address, forwardTo)
 import Html as H exposing (Html)
 import Html.Attributes as HA

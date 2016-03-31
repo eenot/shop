@@ -168,7 +168,6 @@ type Action
   | Done
   -- Only for testing purposes
   | TestCardData
-  | SimulatePurchase UId Slug
 
 
 type alias UpdateContext =
@@ -281,21 +280,6 @@ update context action model =
           |> F.update ( F.Input "card.cvc.value" <| FF.Text "123" )
         }
       , Effects.none
-      )
-
-    SimulatePurchase uid slug ->
-      ( model
-      , ElmFire.set
-          ( JE.string "theSecretKey" )
-          ( (ElmFire.fromUrl Config.firebaseUrl)
-            |> ElmFire.sub "customers"
-            |> ElmFire.sub uid
-            |> ElmFire.sub "purchases"
-            |> ElmFire.sub slug
-          )
-        |> Task.toResult
-        |> Task.map (always NoOp)
-        |> Effects.task
       )
 
 
@@ -464,33 +448,21 @@ view address context model =
           [ ( True -- TODO: Show selectInput for debugging only
             , H.div
                 [ HA.class "debug" ]
-                (
-                  [ FI.selectInput
-                    [ ("signIn", "intent: signIn")
-                      , ("signUp", "intent: signUp")
-                      , ("signUpAndBuy", "intent: signUpAndBuy")
-                      , ("newCardBuy", "intent: newCardBuy")
-                      , ("existingCardBuy", "intent: existingCardBuy")
-                      , ("resetPw", "intent: resetPw")
-                      ]
-                      intentState
-                      formAddress
-                      []
-                  , H.button
-                      [ HE.onClick address TestCardData ]
-                      [ H.text "Use test card data" ]
-                  ]
-                  ++
-                  ( case context.customer of
-                      Just customer ->
-                        [ H.button
-                            [ HE.onClick address (SimulatePurchase customer.uid context.slug) ]
-                            [ H.text "Simulate purchase" ]
-                        ]
-                      Nothing ->
-                        []
-                  )
-                )
+                [ FI.selectInput
+                  [ ("signIn", "intent: signIn")
+                    , ("signUp", "intent: signUp")
+                    , ("signUpAndBuy", "intent: signUpAndBuy")
+                    , ("newCardBuy", "intent: newCardBuy")
+                    , ("existingCardBuy", "intent: existingCardBuy")
+                    , ("resetPw", "intent: resetPw")
+                    ]
+                    intentState
+                    formAddress
+                    []
+                , H.button
+                    [ HE.onClick address TestCardData ]
+                    [ H.text "Use test card data" ]
+                ]
             )
           , ( model.errorMsg /= Nothing
             , H.div

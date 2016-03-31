@@ -1,6 +1,6 @@
 module Store.Customer
   ( Model, init, Action, update
-  , getIssueKey
+  , getIssuePermission
   ) where
 
 import Dict exposing (Dict)
@@ -29,16 +29,22 @@ type alias PaymentData =
   }
 
 type alias Purchases =
-  Dict Slug IssueKey
+   Dict Slug Permission
+
+type alias Permission =
+  { valid : Bool
+  }
 
 --------------------------------------------------------------------------------
 
-syncConfigPurchases : ElmFire.Location -> ElmFire.Dict.Config IssueKey
+syncConfigPurchases : ElmFire.Location -> ElmFire.Dict.Config Permission
 syncConfigPurchases location =
   { location = location
   , orderOptions = ElmFire.noOrder
-  , encoder = \key -> JE.string key
-  , decoder = JD.string
+  , encoder =
+      \perm -> JE.object [ ( "valid", JE.bool perm.valid )]
+  , decoder =
+      JD.object1 Permission ("valid" := JD.bool)
   }
 
 --------------------------------------------------------------------------------
@@ -52,7 +58,7 @@ init address location uid =
   , Effects.batch
       [ ( ElmFire.once
             (ElmFire.valueChanged ElmFire.noOrder)
-            (location |> ElmFire.sub uid |> ElmFire.sub "email")
+            (location |> ElmFire.sub "customers" |> ElmFire.sub uid |> ElmFire.sub "email")
           |> Task.toResult
           |> Task.map QueryStaticResult
           |> Effects.task
@@ -60,7 +66,7 @@ init address location uid =
       , ( ElmFire.Dict.subscribeDelta
             (forwardTo address DeltaPurchases)
             ( syncConfigPurchases
-                (location |> ElmFire.sub uid |> ElmFire.sub "purchases")
+                (location |> ElmFire.sub "permissions" |> ElmFire.sub uid)
             )
           |> Task.toResult
           |> Task.map QueryPurchasesResult
@@ -72,7 +78,7 @@ init address location uid =
 type Action
   = QueryStaticResult (Result ElmFire.Error ElmFire.Snapshot)
   | QueryPurchasesResult (Result ElmFire.Error (Task ElmFire.Error ()))
-  | DeltaPurchases (ElmFire.Dict.Delta IssueKey)
+  | DeltaPurchases (ElmFire.Dict.Delta Permission)
 
 update : Action -> Model -> Model
 update action model =
@@ -103,6 +109,8 @@ update action model =
     DeltaPurchases delta ->
       { model | purchases = ElmFire.Dict.update delta model.purchases }
 
-getIssueKey : Slug -> Model -> Maybe IssueKey
-getIssueKey slug model =
-  Dict.get slug model.purchases
+getIssuePermission : Slug -> Model -> Bool
+getIssuePermission slug model =
+  case Dict.get slug model.purchases of
+    Nothing -> False
+    Just perm -> perm.valid

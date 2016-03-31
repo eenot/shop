@@ -110,17 +110,17 @@ viewIssue address context (slug, issue) =
     isCurrentRoute = context.route == Route.Issue slug
     paid =
       case context.customer of
-        Just { purchases } ->
-          Just (Dict.member slug purchases)
+        Just customer ->
+          Customer.getIssuePermission slug customer
         Nothing ->
-          Nothing
+          False
   in
     H.li
       [ HA.classList
           [ ("item", True)
           , ("selected", isCurrentRoute)
-          , ("paid", paid == Just True)
-          , ("unpaid", paid == Just False)
+          , ("paid", paid)
+          , ("unpaid", not paid)
           ]
       ]
       [ H.button

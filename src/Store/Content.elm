@@ -20,12 +20,12 @@ decoder = ("body" := JD.string)
 --------------------------------------------------------------------------------
 
 
-init : ElmFire.Location -> Slug -> IssueKey -> ( Model, Effects Action )
-init location slug issueKey =
+init : ElmFire.Location -> Slug -> ( Model, Effects Action )
+init location slug =
   ( Nothing
   , ElmFire.once
       ( ElmFire.valueChanged ElmFire.noOrder )
-      ( location |> ElmFire.sub slug |> ElmFire.sub issueKey )
+      ( location |> ElmFire.sub slug )
       |> Task.toResult
       |> Task.map QueryResult
       |> Effects.task

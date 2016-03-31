@@ -12,11 +12,14 @@
         ".write": "$user == auth.uid"
       }
     },
+    "permissions": {
+      "$user": {
+        ".read":  "$user == auth.uid"
+      }
+    },
     "content": {
       "$slug": {
-        "$key": {
-          ".read":  "root.child('customers').child(auth.uid).child('purchases').child($slug).val() == $key"
-        }
+        ".read":  "root.child('permissions').child(auth.uid).child($slug).child('valid').exists()"
       }
     }
   }

@@ -21,6 +21,15 @@
       "$slug": {
         ".read":  "root.child('permissions').child(auth.uid).child($slug).child('valid').exists()"
       }
+    },
+    "purchases": {
+      "queue": {
+        ".read": "auth.uid == 'stripe-gateway'",
+        ".write": true,
+        "tasks" : {
+          ".indexOn": "_state"
+        }
+      }
     }
   }
 }

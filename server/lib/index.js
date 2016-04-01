@@ -1,39 +1,33 @@
 
-var Firebase = require("firebase");
-var Queue = require('firebase-queue');
-
-var root = new Firebase("https://plentifulshop-demo.firebaseio.com/");
-
-// TODO: Example code, to be removed later.
-root
-  .child ("shop/name")
-  .once ("value",
-    function (snapshot) {
-      console .log ("shop/name: %s", snapshot .val ());
-    },
-    function (err) {
-      console .error (err.message);
-    }
-  );
-
-// TODO: Define security rules for the queue and grant access for the server
-
-var queue =
-  new Queue (
-    root .child ("purchases/queue"),
-    function (data, progress, resolve, reject) {
-
-      console.log(data);
-
-      // Do some work
-      progress(50);
-
-      // Finish the task asynchronously
-      setTimeout(function() {
-        resolve();
-      }, 1000);
-
-    }
-  );
+const Firebase = require ("firebase");
+const Queue = require ("firebase-queue");
+const config = require ("config");
 
 
+const rootRef = new Firebase("https://plentifulshop-demo.firebaseio.com/");
+const queueRef = rootRef .child ("purchases/queue");
+
+
+rootRef .authWithCustomToken (config.get ("firebase.token"), function (error, authData) {
+  if (error) {
+    console .error (error.message);
+  } else {
+    console .log ("Authenticated with uid: ", authData .uid);
+    const queue = new Queue (queueRef, processTask);
+    console .log ("Waiting for tasks at: ", queueRef .toString ());
+  }
+});
+
+function processTask (data, progress, resolve, reject) {
+
+  console.log(data);
+
+  // Do some work
+  progress(50);
+
+  // Finish the task asynchronously
+  setTimeout(function() {
+    resolve();
+  }, 1000);
+
+}

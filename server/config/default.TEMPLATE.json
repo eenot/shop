@@ -1,0 +1,8 @@
+{
+  "stripe": {
+    "secret-key": "sk_..."
+  },
+  "firebase": {
+    "secret": "..."
+  }
+}

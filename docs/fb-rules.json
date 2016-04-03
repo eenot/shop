@@ -8,13 +8,19 @@
     },
     "customers": {
       "$user": {
-        ".read":  "$user == auth.uid",
-        ".write": "$user == auth.uid"
+        ".read":  "auth.uid == $user",
+        "email": {
+          ".write": "auth.uid == $user"
+        },
+        "stripeId": {
+          ".write": "auth.uid == 'stripe-gateway'"
+        }
       }
     },
     "permissions": {
       "$user": {
-        ".read":  "$user == auth.uid"
+        ".read":  "auth.uid == $user",
+        ".write": "auth.uid == 'stripe-gateway'"
       }
     },
     "content": {

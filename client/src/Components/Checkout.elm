@@ -342,10 +342,11 @@ effectsSignUp email password =
           (ElmFire.Auth.withPassword email password)
         `Task.andThen` \authentication ->
           ElmFire.set
-            ( JE.object [ ( "email", JE.string email ) ] )
+            ( JE.string email )
             ( location
               |> ElmFire.sub "customers"
               |> ElmFire.sub authentication.uid
+              |> ElmFire.sub "email"
             )
           `Task.andThen` \reference ->
             Task.succeed authentication

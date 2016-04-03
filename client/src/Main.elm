@@ -158,8 +158,12 @@ update action model =
         )
 
     StripeResponse response ->
-      ( { model | page = Page.stripeResponse response model.page }
-      , Effects.none
+      let
+        ( pageModel, pageEffects ) =
+          Page.stripeResponse response model.page
+      in
+      ( { model | page = pageModel }
+      , Effects.map PageAction pageEffects
       )
 
     ShopAction shopAction ->

@@ -129,13 +129,19 @@ customerChanged maybeCustomer model =
       ( model2, effects1 )
 
 
-stripeResponse : Types.StripeResponse -> Model -> Model
+stripeResponse : Types.StripeResponse -> Model -> ( Model, Effects Action )
 stripeResponse response model =
   case model.checkout of
     Just checkout ->
-      { model | checkout = Just <| Checkout.stripeResponse response checkout }
+      let
+        ( checkoutModel, checkoutEffects ) =
+          Checkout.stripeResponse response checkout
+      in
+        ( { model | checkout = Just <| checkoutModel }
+        , Effects.map CheckoutAction checkoutEffects
+        )
     _ ->
-      model
+      ( model, Effects.none )
 
 
 type alias ViewContext =

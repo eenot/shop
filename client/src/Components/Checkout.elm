@@ -165,6 +165,7 @@ type Action
   | Submit
   | AuthResult (Result ElmFire.Error ElmFire.Auth.Authentication)
   | UserOpResult (Result ElmFire.Error (Maybe String))
+  | PushTaskResult (Result ElmFire.Error ())
   | Done
   -- Only for testing purposes
   | TestCardData
@@ -269,6 +270,20 @@ update context action model =
       , Effects.none
       )
 
+    PushTaskResult firebaseResult ->
+      ( case firebaseResult of
+          Err { description } ->
+            { model
+            | errorMsg = Just description
+            , busy = False
+            }
+          Ok _ ->
+            { model
+            | errorMsg = Nothing
+            }
+      , Effects.none
+      )
+
     Done ->
       ( { model | busy = False } , Effects.none )
 
@@ -353,10 +368,14 @@ effectsNewCardBuy context uid email card =
   Signal.send
     context.stripeRequestsAddress
     { request = "createToken"
-    , args = [card.number, card.expiry, card.cvc]
+    , args =
+        [ card.number, card.expiry, card.cvc
+        , uid, email
+        , context.slug
+        , toString context.issue.price, context.issue.title
+        ]
     }
-  |> Task.map (logUnimplementedBuy "newCardBuy" context uid email)
-  |> Task.map (always Done)
+  |> Task.map (always NoOp)
 
 
 effectsSignUpAndBuy : UpdateContext -> String -> String -> Card -> Task Never Action
@@ -391,16 +410,50 @@ logUnimplementedBuy intent context uid email =
     )
 
 
-stripeResponse : Types.StripeResponse -> Model -> Model
-stripeResponse { request, args, result } model =
+stripeResponse : Types.StripeResponse -> Model -> ( Model, Effects Action )
+stripeResponse { request, args, ok } model =
   case (request, args) of
     ("validate", [fieldName, value]) ->
-      { model | form =
-          F.update
-            ( F.Input ("card." ++ fieldName ++ ".valid") (FF.Check result) )
-            model.form
-      }
-    _ -> model
+      ( { model | form =
+            F.update
+              ( F.Input ("card." ++ fieldName ++ ".valid") (FF.Check ok) )
+              model.form
+        }
+      , Effects.none
+      )
+    ("createToken", [uid, email, slug, price, title, tokenOrMsg]) ->
+      if ok
+      then
+        ( model,
+          ElmFire.set
+            ( JE.object
+                [ ("uid", JE.string uid)
+                , ("email", JE.string email)
+                , ("slug", JE.string slug)
+                , ("price", JE.string price)
+                , ("title", JE.string title)
+                , ("token", JE.string tokenOrMsg)
+                ]
+            )
+            ( ElmFire.fromUrl Config.firebaseUrl
+                |> ElmFire.sub "purchases"
+                |> ElmFire.sub "queue"
+                |> ElmFire.sub "tasks"
+                |> ElmFire.push
+            )
+          |> Task.map (always ())
+          |> Task.toResult
+          |> Task.map PushTaskResult
+          |> Effects.task
+        )
+      else
+        ( { model
+          | busy = False
+          , errorMsg = Just tokenOrMsg
+          }
+        , Effects.none
+        )
+    _ -> ( model, Effects.none )
 
 
 type alias ViewContext =

@@ -9,7 +9,7 @@ var main = Elm.embed (
   Elm.Main,
   document.getElementById('main'),
   { initialPath: window.location.pathname,
-    stripeResponses: { request: "none", args: [], result: false }
+    stripeResponses: { request: "none", args: [], ok: false }
   }
 );
 
@@ -43,7 +43,7 @@ main.ports.runStripeRequests.subscribe (function (obj) {
     var validationResponse = {
       request: obj.request,
       args: obj.args,
-      result: valid
+      ok: valid
     };
     // console.log ('validationResponse: %o', validationResponse);
     main.ports.stripeResponses.send (validationResponse);
@@ -55,8 +55,18 @@ main.ports.runStripeRequests.subscribe (function (obj) {
       exp: obj.args [1],
       cvc: obj.args [2]
     }, function stripeResponseHandle (status, response) {
+      var args = obj.args.slice (3);
+      args.push (response.error ? response.error.message : response.id);
+      var tokenResponse = {
+        request: obj.request,
+        args: args,
+        ok: ! response.error
+      };
       console.log ('[Stripe.card.createToken] request: %o, status: %o, response: %o', obj, status, response);
-      // TODO: Here goes code to use the token
+      console.log ('tokenResponse: %o', tokenResponse);
+      main.ports.stripeResponses.send (tokenResponse);
+
+
     });
   }
 });

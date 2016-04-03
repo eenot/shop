@@ -92,8 +92,8 @@ customerChanged maybeCustomer model =
     ( model1, effects1 ) =
       case maybeCustomer of
         Just customer ->
-          case Customer.getIssueKey model.slug customer of
-            Just issueKey ->
+          if Customer.getIssuePermission model.slug customer
+            then
               case model.content of
                 Just content ->
                   ( model, Effects.none )
@@ -103,7 +103,6 @@ customerChanged maybeCustomer model =
                       Content.init
                         ( ElmFire.fromUrl Config.firebaseUrl |> ElmFire.sub "content" )
                         model.slug
-                        issueKey
                   in
                     ( { model
                       | content = Just contentModel
@@ -111,7 +110,7 @@ customerChanged maybeCustomer model =
                       }
                     , Effects.map ContentAction contentEffects
                     )
-            Nothing ->
+            else
               ( addCheckout { model | content = Nothing }
               , Effects.none
               )

@@ -166,9 +166,7 @@ update context action model =
         ( customerModel, customerEffects ) =
           Customer.init
             ( forwardTo model.address CustomerAction )
-            ( ElmFire.fromUrl Config.firebaseUrl
-               |> ElmFire.sub "customers"
-            )
+            ( ElmFire.fromUrl Config.firebaseUrl )
             authentication.uid
       in
         ( { model | customer = Just customerModel }

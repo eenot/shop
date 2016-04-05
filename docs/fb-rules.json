@@ -32,9 +32,12 @@
     "purchases": {
       "queue": {
         ".read": "auth.uid == 'stripe-gateway'",
-        ".write": "auth != null",
         "tasks" : {
-          ".indexOn": "_state"
+          ".write": "auth != null",
+          ".indexOn": "_state",
+          "$taskId" : {
+            ".read": "auth.uid == data.child('uid').val()"
+          }
         }
       }
     }

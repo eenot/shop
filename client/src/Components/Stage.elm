@@ -44,7 +44,8 @@ type Action
 
 
 type alias UpdateContext =
-  { stripeRequestsAddress : Address Types.StripeRequest
+  { address : Address Action
+  , stripeRequestsAddress : Address Types.StripeRequest
   , customer : Maybe Customer.Model
   }
 
@@ -58,7 +59,8 @@ update context action model =
           let
             ( checkoutModel, checkoutEffects ) =
               Checkout.update
-                { stripeRequestsAddress = context.stripeRequestsAddress
+                { address = forwardTo context.address CheckoutAction
+                , stripeRequestsAddress = context.stripeRequestsAddress
                 , slug = model.slug
                 , issue = model.issue
                 , customer = context.customer

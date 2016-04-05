@@ -201,7 +201,9 @@ update action model =
       let
         ( pageModel, pageEffects ) =
           Page.update
-            { stripeRequestsAddress = stripeRequestsBox.address }
+            { address = forwardTo serverInput.address PageAction
+            , stripeRequestsAddress = stripeRequestsBox.address
+            }
             pageAction
             model.page
       in

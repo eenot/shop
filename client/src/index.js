@@ -62,8 +62,8 @@ main.ports.runStripeRequests.subscribe (function (obj) {
         args: args,
         ok: ! response.error
       };
-      console.log ('[Stripe.card.createToken] request: %o, status: %o, response: %o', obj, status, response);
-      console.log ('tokenResponse: %o', tokenResponse);
+      // console.log ('[Stripe.card.createToken] request: %o, status: %o, response: %o', obj, status, response);
+      // console.log ('tokenResponse: %o', tokenResponse);
       main.ports.stripeResponses.send (tokenResponse);
 
 

@@ -9,6 +9,7 @@ import Signal exposing (Address, forwardTo)
 import Task exposing (Task)
 import Effects exposing (Effects, Never)
 import Json.Encode as JE
+import Json.Decode as JD
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -165,14 +166,17 @@ type Action
   | Submit
   | AuthResult (Result ElmFire.Error ElmFire.Auth.Authentication)
   | UserOpResult (Result ElmFire.Error (Maybe String))
-  | PushTaskResult (Result ElmFire.Error ())
+  | TaskPushResult (Result ElmFire.Error ElmFire.Reference)
+  | TaskFeedback ElmFire.Reference (Maybe String)
+  | FirebaseResult String (Result ElmFire.Error ())
   | Done
   -- Only for testing purposes
   | TestCardData
 
 
 type alias UpdateContext =
-  { stripeRequestsAddress : Address Types.StripeRequest
+  { address : Address Action
+  , stripeRequestsAddress : Address Types.StripeRequest
   , slug: Slug
   , issue : Issue
   , customer : Maybe Customer.Model
@@ -270,18 +274,70 @@ update context action model =
       , Effects.none
       )
 
-    PushTaskResult firebaseResult ->
-      ( case firebaseResult of
-          Err { description } ->
-            { model
-            | errorMsg = Just description
-            , busy = False
-            }
-          Ok _ ->
-            { model
-            | errorMsg = Nothing
-            }
-      , Effects.none
+    FirebaseResult title result ->
+      let _ = case result of
+        Err { description } ->
+          always () <| Debug.log title description
+        Ok () -> ()
+      in
+      ( model, Effects.none )
+
+    TaskPushResult result ->
+      case result of
+        Err { description } ->
+          let _ = Debug.log "Error pushing task to Firebase: " description
+          in
+            ( { model | busy = False }
+            , Effects.none
+            )
+        Ok taskRef ->
+          -- Query task's feedback
+          let
+            decoder = JD.oneOf [ JD.null Nothing, JD.map Just JD.string ]
+          in
+          ( { model | errorMsg = Nothing }
+          , ElmFire.subscribe
+              ( \snapshot ->
+                  case JD.decodeValue decoder snapshot.value of
+                    Err error ->
+                      always (Task.succeed ()) <|
+                        Debug.log "Error decoding task feedback: " error
+                    Ok feedback ->
+                      Signal.send
+                        context.address
+                          (TaskFeedback taskRef feedback)
+              )
+              ( always (Task.succeed ()) )
+              ( ElmFire.valueChanged ElmFire.noOrder )
+              ( taskRef |> ElmFire.location |> ElmFire.sub "feedback" )
+            |> Task.map (always ())
+            |> Task.toResult
+            |> Task.map (FirebaseResult "Error querying task feedback from Firebase: ")
+            |> Effects.task
+         )
+
+    TaskFeedback taskRef feedback ->
+      -- TODO: Subscription should be cancelled (except for (Just ""))
+      ( case feedback of
+          Nothing ->
+            ( { model
+              | busy = False
+              }
+            , Effects.none
+            )
+          (Just "") ->
+            ( model, Effects.none )
+          (Just message) ->
+            ( { model
+              | errorMsg = Just message
+              , busy = False
+              }
+            , ElmFire.remove (ElmFire.location taskRef)
+                |> Task.map (always ())
+                |> Task.toResult
+                |> Task.map (FirebaseResult "Error removing task from Firebase: ")
+                |> Effects.task
+            )
       )
 
     Done ->
@@ -434,6 +490,7 @@ stripeResponse { request, args, ok } model =
                 , ("price", JE.string price)
                 , ("title", JE.string title)
                 , ("token", JE.string tokenOrMsg)
+                , ("feedback", JE.string "")
                 ]
             )
             ( ElmFire.fromUrl Config.firebaseUrl
@@ -442,9 +499,8 @@ stripeResponse { request, args, ok } model =
                 |> ElmFire.sub "tasks"
                 |> ElmFire.push
             )
-          |> Task.map (always ())
           |> Task.toResult
-          |> Task.map PushTaskResult
+          |> Task.map TaskPushResult
           |> Effects.task
         )
       else

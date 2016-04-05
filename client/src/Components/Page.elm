@@ -77,7 +77,8 @@ type Action
 
 
 type alias UpdateContext =
-  { stripeRequestsAddress : Address Types.StripeRequest
+  { address : Address Action
+  , stripeRequestsAddress : Address Types.StripeRequest
   }
 
 
@@ -129,7 +130,8 @@ update context action model =
           let
             ( stageModel, stageEffects ) =
               Stage.update
-                { stripeRequestsAddress = context.stripeRequestsAddress
+                { address = forwardTo context.address StageAction
+                , stripeRequestsAddress = context.stripeRequestsAddress
                 , customer = model.customer
                 }
                 stageAction stage

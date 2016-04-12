@@ -4,20 +4,25 @@ machine:
 
 dependencies:
   pre:
-    - npm install -g elm
+    - npm install -g elm:
+        pwd: client
   post:
-    - npm install
+    - npm install:
+        pwd: client
   # cache_directories:
   #   - node_modules
   #   - elm-stuff
 
 test:
   override:
-    - npm test 
+    - npm test:
+        pwd: client
 
 deployment:
   production:
     branch: "master"
     commands:
-      - npm install 
-      - npm build
+      - npm install:
+          pwd: client
+      - npm build:
+          pwd: client

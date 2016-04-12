@@ -9,6 +9,7 @@ import Signal exposing (Address, forwardTo)
 import Task exposing (Task)
 import Effects exposing (Effects, Never)
 import Json.Encode as JE
+import Json.Decode as JD
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -165,13 +166,17 @@ type Action
   | Submit
   | AuthResult (Result ElmFire.Error ElmFire.Auth.Authentication)
   | UserOpResult (Result ElmFire.Error (Maybe String))
+  | TaskPushResult (Result ElmFire.Error ElmFire.Reference)
+  | TaskFeedback ElmFire.Reference (Maybe String)
+  | FirebaseResult String (Result ElmFire.Error ())
   | Done
   -- Only for testing purposes
   | TestCardData
 
 
 type alias UpdateContext =
-  { stripeRequestsAddress : Address Types.StripeRequest
+  { address : Address Action
+  , stripeRequestsAddress : Address Types.StripeRequest
   , slug: Slug
   , issue : Issue
   , customer : Maybe Customer.Model
@@ -269,6 +274,72 @@ update context action model =
       , Effects.none
       )
 
+    FirebaseResult title result ->
+      let _ = case result of
+        Err { description } ->
+          always () <| Debug.log title description
+        Ok () -> ()
+      in
+      ( model, Effects.none )
+
+    TaskPushResult result ->
+      case result of
+        Err { description } ->
+          let _ = Debug.log "Error pushing task to Firebase: " description
+          in
+            ( { model | busy = False }
+            , Effects.none
+            )
+        Ok taskRef ->
+          -- Query task's feedback
+          let
+            decoder = JD.oneOf [ JD.null Nothing, JD.map Just JD.string ]
+          in
+          ( { model | errorMsg = Nothing }
+          , ElmFire.subscribe
+              ( \snapshot ->
+                  case JD.decodeValue decoder snapshot.value of
+                    Err error ->
+                      always (Task.succeed ()) <|
+                        Debug.log "Error decoding task feedback: " error
+                    Ok feedback ->
+                      Signal.send
+                        context.address
+                          (TaskFeedback taskRef feedback)
+              )
+              ( always (Task.succeed ()) )
+              ( ElmFire.valueChanged ElmFire.noOrder )
+              ( taskRef |> ElmFire.location |> ElmFire.sub "feedback" )
+            |> Task.map (always ())
+            |> Task.toResult
+            |> Task.map (FirebaseResult "Error querying task feedback from Firebase: ")
+            |> Effects.task
+         )
+
+    TaskFeedback taskRef feedback ->
+      -- TODO: Subscription should be cancelled (except for (Just ""))
+      ( case feedback of
+          Nothing ->
+            ( { model
+              | busy = False
+              }
+            , Effects.none
+            )
+          (Just "") ->
+            ( model, Effects.none )
+          (Just message) ->
+            ( { model
+              | errorMsg = Just message
+              , busy = False
+              }
+            , ElmFire.remove (ElmFire.location taskRef)
+                |> Task.map (always ())
+                |> Task.toResult
+                |> Task.map (FirebaseResult "Error removing task from Firebase: ")
+                |> Effects.task
+            )
+      )
+
     Done ->
       ( { model | busy = False } , Effects.none )
 
@@ -327,10 +398,11 @@ effectsSignUp email password =
           (ElmFire.Auth.withPassword email password)
         `Task.andThen` \authentication ->
           ElmFire.set
-            ( JE.object [ ( "email", JE.string email ) ] )
+            ( JE.string email )
             ( location
               |> ElmFire.sub "customers"
               |> ElmFire.sub authentication.uid
+              |> ElmFire.sub "email"
             )
           `Task.andThen` \reference ->
             Task.succeed authentication
@@ -353,10 +425,14 @@ effectsNewCardBuy context uid email card =
   Signal.send
     context.stripeRequestsAddress
     { request = "createToken"
-    , args = [card.number, card.expiry, card.cvc]
+    , args =
+        [ card.number, card.expiry, card.cvc
+        , uid, email
+        , context.slug
+        , toString context.issue.price, context.issue.title
+        ]
     }
-  |> Task.map (logUnimplementedBuy "newCardBuy" context uid email)
-  |> Task.map (always Done)
+  |> Task.map (always NoOp)
 
 
 effectsSignUpAndBuy : UpdateContext -> String -> String -> Card -> Task Never Action
@@ -391,16 +467,50 @@ logUnimplementedBuy intent context uid email =
     )
 
 
-stripeResponse : Types.StripeResponse -> Model -> Model
-stripeResponse { request, args, result } model =
+stripeResponse : Types.StripeResponse -> Model -> ( Model, Effects Action )
+stripeResponse { request, args, ok } model =
   case (request, args) of
     ("validate", [fieldName, value]) ->
-      { model | form =
-          F.update
-            ( F.Input ("card." ++ fieldName ++ ".valid") (FF.Check result) )
-            model.form
-      }
-    _ -> model
+      ( { model | form =
+            F.update
+              ( F.Input ("card." ++ fieldName ++ ".valid") (FF.Check ok) )
+              model.form
+        }
+      , Effects.none
+      )
+    ("createToken", [uid, email, slug, price, title, tokenOrMsg]) ->
+      if ok
+      then
+        ( model,
+          ElmFire.set
+            ( JE.object
+                [ ("uid", JE.string uid)
+                , ("email", JE.string email)
+                , ("slug", JE.string slug)
+                , ("price", JE.string price)
+                , ("title", JE.string title)
+                , ("token", JE.string tokenOrMsg)
+                , ("feedback", JE.string "")
+                ]
+            )
+            ( ElmFire.fromUrl Config.firebaseUrl
+                |> ElmFire.sub "purchases"
+                |> ElmFire.sub "queue"
+                |> ElmFire.sub "tasks"
+                |> ElmFire.push
+            )
+          |> Task.toResult
+          |> Task.map TaskPushResult
+          |> Effects.task
+        )
+      else
+        ( { model
+          | busy = False
+          , errorMsg = Just tokenOrMsg
+          }
+        , Effects.none
+        )
+    _ -> ( model, Effects.none )
 
 
 type alias ViewContext =
@@ -449,7 +559,7 @@ view address context model =
             , H.div
                 [ HA.class "debug" ]
                 [ FI.selectInput
-                  [ ("signIn", "intent: signIn")
+                    [ ("signIn", "intent: signIn")
                     , ("signUp", "intent: signUp")
                     , ("signUpAndBuy", "intent: signUpAndBuy")
                     , ("newCardBuy", "intent: newCardBuy")

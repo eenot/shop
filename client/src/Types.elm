@@ -12,5 +12,5 @@ type alias StripeRequest =
 type alias StripeResponse =
   { request: String
   , args: List String
-  , result: Bool
+  , ok: Bool
   }

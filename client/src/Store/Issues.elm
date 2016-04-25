@@ -8,7 +8,8 @@ import Signal exposing (Address, message, forwardTo)
 import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
 import Json.Encode as JE
-import Json.Decode as JD exposing ((:=))
+import Json.Decode as JD
+import Json.Decode.Pipeline as JDP
 
 import ElmFire
 import ElmFire.Dict
@@ -47,11 +48,13 @@ syncConfig location =
           )
         ]
   , decoder =
-      ( JD.object3 Issue
-          ( "title" := JD.string )
-          ( "price" := JD.float )
-          ( JD.maybe ("teaser" := JD.string) )
-      )
+      JDP.decode Issue
+        |> JDP.required "title" JD.string
+        |> JDP.required "price" JD.float
+        |> JDP.optional "teaser" (JD.map Just JD.string) Nothing
+        -- Alternatively use Json.Decode.maybe:
+        -- |> JDP.custom (JD.maybe (JD.at ["teaser"] JD.string))
+        -- Also see discussion in https://github.com/NoRedInk/elm-decode-pipeline/issues/3
   }
 
 --------------------------------------------------------------------------------

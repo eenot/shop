@@ -2,7 +2,7 @@ module Store.Content (Model, init, Action, update) where
 
 import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
-import Json.Decode as JD exposing ((:=))
+import Json.Decode as JD
 import ElmFire
 
 import Types exposing (..)
@@ -14,7 +14,7 @@ type alias Model = Maybe String
 
 
 decoder : JD.Decoder String
-decoder = ("body" := JD.string)
+decoder = JD.at ["body"] JD.string
 
 
 --------------------------------------------------------------------------------

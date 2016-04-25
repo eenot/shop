@@ -8,7 +8,8 @@ import Signal exposing (Address, message, forwardTo)
 import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
 import Json.Encode as JE
-import Json.Decode as JD exposing ((:=))
+import Json.Decode as JD
+import Json.Decode.Pipeline as JDP
 
 import ElmFire
 import ElmFire.Dict
@@ -43,8 +44,8 @@ syncConfigPurchases location =
   , orderOptions = ElmFire.noOrder
   , encoder =
       \perm -> JE.object [ ( "valid", JE.bool perm.valid )]
-  , decoder =
-      JD.object1 Permission ("valid" := JD.bool)
+  , decoder = JDP.decode Permission
+      |> JDP.required "valid" JD.bool
   }
 
 --------------------------------------------------------------------------------

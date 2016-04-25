@@ -2,7 +2,8 @@ module Store.Shop (Model, init, Action, update) where
 
 import Task exposing (Task, andThen)
 import Effects exposing (Effects, Never)
-import Json.Decode as JD exposing ((:=))
+import Json.Decode as JD
+import Json.Decode.Pipeline as JDP
 import ElmFire
 
 
@@ -19,10 +20,8 @@ type alias Model =
 
 decoder : JD.Decoder Model
 decoder =
-  JD.object1
-    Model
-    ("name" := JD.string)
-
+  JDP.decode Model
+    |>JDP.required "name" JD.string
 
 
 --------------------------------------------------------------------------------

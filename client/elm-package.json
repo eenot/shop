@@ -8,6 +8,7 @@
     ],
     "exposed-modules": [],
     "dependencies": {
+        "NoRedInk/elm-decode-pipeline": "1.0.0 <= v < 2.0.0",
         "ThomasWeiser/elmfire": "1.0.5 <= v < 2.0.0",
         "ThomasWeiser/elmfire-extra": "1.0.3 <= v < 2.0.0",
         "elm-community/elm-history": "1.0.1 <= v < 2.0.0",

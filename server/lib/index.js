@@ -44,7 +44,8 @@ var schema = Joi.object().keys({
   slug: Joi.string().required(),
   price: Joi.number().options({ convert: true }).positive(),
   title: Joi.string().required(),
-  token: Joi.string().required(),
+  operation: Joi.string().required().valid(["newCustomer", "TODOexistingCustomer"]),
+  tokenOrCustomer: Joi.string().required(),
   feedback: Joi.string().valid("").required()
 });
 
@@ -86,8 +87,9 @@ function processTask (rawData, progress, resolve, reject) {
       }
       // Create a Stripe customer from a token representing a card
       stripe.customers.create({
-        source: data.token,
-        email: data.email
+        source: data.tokenOrCustomer,
+        email: data.email,
+        metadata: { uid: data.uid }
       }, (error, customer) => {
         if (error) {
           if (error.type === 'StripeCardError') {
@@ -103,11 +105,13 @@ function processTask (rawData, progress, resolve, reject) {
         // Write customer id into Firebase
         customersRef
           .child (data.uid)
-          .child ("stripeId")
-          .set (customer.id, error => {
+          .child ("paymentData")
+          .set ({
+              stripeId: customer.id
+            }, error => {
             if (error) {
               console.error ("Cannot write customer id to Firebase: ", error);
-              report ("Firebase error");
+              report ("Firebase write error");
               return;
             }
             console.log ("customer: ", {uid: data.uid, stripeId: customer.id});
@@ -116,8 +120,11 @@ function processTask (rawData, progress, resolve, reject) {
               amount: data.price,
               currency: "usd",
               customer: customer.id,
-              description: config.get ("strings.chargeDescriptionPrefix") + data.title,
-              statement_descriptor: (config.get ("strings.statementPrefix") + data.slug).slice (0, 22)
+              description: config.get ("strings.chargeDescriptionPrefix")
+                + data.title,
+              statement_descriptor: (config.get ("strings.statementPrefix")
+                + data.slug)
+                .slice (0, 22)
             }, (error, charge) => {
               if (error) {
                 if (error.type === 'StripeCardError') {
@@ -149,7 +156,8 @@ function processTask (rawData, progress, resolve, reject) {
                     report ("Firebase error");
                     return;
                   }
-                  console.log ("permission: ", {uid: data.uid, slug: data.slug});
+                  console.log ("permission: ",
+                    {uid: data.uid, slug: data.slug});
                   // Mark task as complete; it will be removed from the queue
                   resolve ();
                 });

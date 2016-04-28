@@ -482,26 +482,15 @@ stripeResponse { request, args, ok } model =
       if ok
       then
         ( model,
-          ElmFire.set
-            ( JE.object
-                [ ("uid", JE.string uid)
-                , ("email", JE.string email)
-                , ("slug", JE.string slug)
-                , ("price", JE.string price)
-                , ("title", JE.string title)
-                , ("token", JE.string tokenOrMsg)
-                , ("feedback", JE.string "")
-                ]
-            )
-            ( ElmFire.fromUrl Config.firebaseUrl
-                |> ElmFire.sub "purchases"
-                |> ElmFire.sub "queue"
-                |> ElmFire.sub "tasks"
-                |> ElmFire.push
-            )
-          |> Task.toResult
-          |> Task.map TaskPushResult
-          |> Effects.task
+          gatewayRequestEffect
+            { uid = uid
+            , email = email
+            , slug = slug
+            , price = price
+            , title = title
+            , operation = NewCustomer
+            , tokenOrCustomer = tokenOrMsg
+            }
         )
       else
         ( { model
@@ -511,6 +500,49 @@ stripeResponse { request, args, ok } model =
         , Effects.none
         )
     _ -> ( model, Effects.none )
+
+
+type GatewayOperation = NewCustomer | ExistingCustomer
+
+
+type alias GatewayRequest =
+  { uid : String
+  , email : String
+  , slug : String
+  , price : String
+  , title : String
+  , operation : GatewayOperation
+  , tokenOrCustomer : String
+  }
+
+
+gatewayRequestEffect : GatewayRequest -> Effects Action
+gatewayRequestEffect request =
+  ElmFire.set
+    ( JE.object
+        [ ( "uid", JE.string request.uid )
+        , ( "email", JE.string request.email )
+        , ( "slug", JE.string request.slug )
+        , ( "price", JE.string request.price )
+        , ( "title", JE.string request.title )
+        , ( "operation", JE.string <|
+              case request.operation of
+                NewCustomer -> "newCustomer"
+                ExistingCustomer -> "existingCustomer"
+          )
+        , ( "tokenOrCustomer", JE.string request.tokenOrCustomer )
+        , ( "feedback", JE.string "" )
+        ]
+    )
+    ( ElmFire.fromUrl Config.firebaseUrl
+        |> ElmFire.sub "purchases"
+        |> ElmFire.sub "queue"
+        |> ElmFire.sub "tasks"
+        |> ElmFire.push
+    )
+  |> Task.toResult
+  |> Task.map TaskPushResult
+  |> Effects.task
 
 
 type alias ViewContext =

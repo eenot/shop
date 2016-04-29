@@ -46,7 +46,7 @@ var schema = Joi.object().keys({
   slug: Joi.string().required(),
   price: Joi.number().options({ convert: true }).positive(),
   title: Joi.string().required(),
-  operation: Joi.string().required().valid(["newCustomer", "TODOexistingCustomer"]),
+  operation: Joi.string().required().valid(["newCustomer", "existingCustomer"]),
   tokenOrCustomer: Joi.string().required(),
   feedback: Joi.string().valid("").required()
 });
@@ -82,22 +82,40 @@ function processTask (rawData, progress, resolveTask, rejectTask) {
       }
       return null;
     })
+
     .then (() => {
-      // Create a Stripe customer from a token representing a card
-      return stripe.customers.create ({
-        source: data.tokenOrCustomer,
-        email: data.email,
-        metadata: {uid: data.uid}
-      });
+      if (data.operation == "existingCustomer") {
+        customer = { id: data.tokenOrCustomer };
+        return null;
+      }
+      else {
+        // Create a new Stripe customer from a token representing a card
+        return stripe.customers.create ({
+          source: data.tokenOrCustomer,
+          email: data.email,
+          metadata: {uid: data.uid}
+        })
+        .then (customerLocal => {
+          // Read details of customers default card
+          customer = customerLocal;
+          return stripe.customers.retrieveCard (
+            customer.id, customer.default_source);
+        })
+        .then (card => {
+          progress (33);
+          console.log ("card: ",
+            {id: card.id, brand: card.brand, last4: card.last4});
+          // Write customer id into Firebase
+          return customersRef.child (data.uid).child ("paymentData")
+            .set ({
+              stripeId: customer.id,
+              cardBrand: card.brand,
+              cardLast4: card.last4
+            });
+        });
+      }
     })
-    .then (customerLocal => {
-      customer = customerLocal;
-      progress (33);
-      console.log ("customer: ", {uid: data.uid, stripeId: customer.id});
-      // Write customer id into Firebase
-      return customersRef.child (data.uid).child ("paymentData")
-        .set ({stripeId: customer.id})
-    })
+
     .then (() => {
       // Charge the customer
       return stripe.charges.create ({
@@ -117,7 +135,7 @@ function processTask (rawData, progress, resolveTask, rejectTask) {
         uid: data.uid,
         stripeId: customer.id,
         chargeId: charge.id,
-        amount: charge.amount * 999999999999,
+        amount: charge.amount,
         currency: charge.currency
       });
       // Grant permission to read the purchased item

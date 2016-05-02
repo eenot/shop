@@ -21,12 +21,14 @@ import Types exposing (..)
 type alias Model =
   { uid : UId
   , email : String
-  -- , paymentData : PaymentData
+  , paymentData : Maybe PaymentData
   , purchases : Purchases
   }
 
 type alias PaymentData =
-  {
+  { stripeId : String
+  , cardBrand : String
+  , cardLast4 : String
   }
 
 type alias Purchases =
@@ -48,12 +50,25 @@ syncConfigPurchases location =
       |> JDP.required "valid" JD.bool
   }
 
+paymentDataDecoder : JD.Decoder (Maybe PaymentData)
+paymentDataDecoder =
+  JD.oneOf
+    [ JD.null Nothing
+    , JD.map Just
+        ( JDP.decode PaymentData
+            |> JDP.required "stripeId" JD.string
+            |> JDP.required "cardBrand" JD.string
+            |> JDP.required "cardLast4" JD.string
+        )
+    ]
+
 --------------------------------------------------------------------------------
 
 init : Address Action -> ElmFire.Location -> UId -> (Model, Effects Action)
 init address location uid =
   ( { uid = uid
     , email = ""
+    , paymentData = Nothing
     , purchases = Dict.empty
     }
   , Effects.batch
@@ -62,6 +77,21 @@ init address location uid =
             (location |> ElmFire.sub "customers" |> ElmFire.sub uid |> ElmFire.sub "email")
           |> Task.toResult
           |> Task.map QueryStaticResult
+          |> Effects.task
+        )
+      , ( ElmFire.subscribe
+            ( \snapshot ->
+              Signal.send address (SnapshotPaymenData snapshot)
+            )
+            ( always (Task.succeed ()) )
+            ( ElmFire.valueChanged ElmFire.noOrder )
+            ( location
+                |> ElmFire.sub "customers"
+                |> ElmFire.sub uid
+                |> ElmFire.sub "paymentData"
+            )
+          |> Task.toResult
+          |> Task.map SubscriptionPaymentData
           |> Effects.task
         )
       , ( ElmFire.Dict.subscribeDelta
@@ -78,6 +108,8 @@ init address location uid =
 
 type Action
   = QueryStaticResult (Result ElmFire.Error ElmFire.Snapshot)
+  | SubscriptionPaymentData (Result ElmFire.Error ElmFire.Subscription)
+  | SnapshotPaymenData (ElmFire.Snapshot)
   | QueryPurchasesResult (Result ElmFire.Error (Task ElmFire.Error ()))
   | DeltaPurchases (ElmFire.Dict.Delta Permission)
 
@@ -96,6 +128,24 @@ update action model =
 
         Ok email ->
           { model | email = email }
+
+    SubscriptionPaymentData (Err error) ->
+      always model <|
+        Debug.log "Firebase: paymentData query error" error
+
+    SubscriptionPaymentData (Ok subscription) ->
+      -- No need to unsubscribe on sign-out.
+      -- After signing out Firebase will stop the subscription with an error,
+      -- which is silently ignored here.
+      model
+
+    SnapshotPaymenData snapshot ->
+      case JD.decodeValue paymentDataDecoder snapshot.value of
+        Err error ->
+          always model <|
+            Debug.log "Error decoding paymentData: " error
+        Ok paymentData ->
+          { model | paymentData = paymentData }
 
     QueryPurchasesResult (Err error) ->
       always model <|

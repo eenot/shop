@@ -212,6 +212,7 @@ update context action model =
         | form = F.update
             ( F.Input "intent" <| FF.Text intent )
             model.form
+        , busy = False
         }
       , Effects.none
       )
@@ -246,7 +247,7 @@ update context action model =
                     effectsNewCardBuy context customer.uid customer.email card
 
                   ( "existingCardBuy", Nothing, Nothing, Nothing, Just customer ) ->
-                    existingCardBuy context customer.uid customer.email
+                    existingCardBuy context customer
 
                   _ ->
                     always (Task.succeed NoOp)
@@ -307,6 +308,7 @@ update context action model =
                         context.address
                           (TaskFeedback taskRef feedback)
               )
+              -- Subscription gets cancelled with a permission error when task is removed.
               ( always (Task.succeed ()) )
               ( ElmFire.valueChanged ElmFire.noOrder )
               ( taskRef |> ElmFire.location |> ElmFire.sub "feedback" )
@@ -317,7 +319,6 @@ update context action model =
          )
 
     TaskFeedback taskRef feedback ->
-      -- TODO: Subscription should be cancelled (except for (Just ""))
       ( case feedback of
           Nothing ->
             ( { model
@@ -357,18 +358,13 @@ update context action model =
 customerChanged : Maybe Customer.Model -> Model -> Model
 customerChanged customer model =
   let
-    intentState = F.getFieldAsString "intent" model.form
-    intent = Maybe.withDefault "inconsistent intent field" intentState.value
-    intentForCustomer = List.member intent ["newCardBuy", "existingCardBuy"]
     intent1 = case customer of
-      Just _ ->
-        if intentForCustomer
-        then intent
-        else "newCardBuy"
+      Just customer ->
+        case customer.paymentData of
+          Just _ -> "existingCardBuy"
+          Nothing -> "newCardBuy"
       Nothing ->
-        if intentForCustomer
-        then "signIn"
-        else intent
+        "signIn"
   in
     { model | form =
         F.update ( F.Input "intent" <| FF.Text intent1 ) model.form
@@ -449,22 +445,21 @@ effectsSignUpAndBuy context email password card =
           Task.succeed authResult
 
 
-existingCardBuy : UpdateContext -> UId -> String -> Task Never Action
-existingCardBuy context uid email =
-  logUnimplementedBuy "existingCardBuy" context uid email
-    (Task.succeed Done)
-
-
-logUnimplementedBuy : String -> UpdateContext -> UId -> String -> a -> a
-logUnimplementedBuy intent context uid email =
-  (flip always)
-    ( Debug.log
-        ("Submitted intent: " ++ intent ++ " (not yet implemented)")
-        { customer = { uid = uid, email = email }
+existingCardBuy : UpdateContext -> Customer.Model -> Task Never Action
+existingCardBuy context customer =
+  case customer.paymentData of
+    Just { stripeId } ->
+      gatewayRequestEffect
+        { uid = customer.uid
+        , email = customer.email
         , slug = context.slug
-        , price = context.issue.price
+        , price = toString context.issue.price
+        , title = context.issue.title
+        , operation = ExistingCustomer
+        , tokenOrCustomer = stripeId
         }
-    )
+    Nothing -> -- Should not happen
+      Task.succeed (SwitchIntent "newCardBuy")
 
 
 stripeResponse : Types.StripeResponse -> Model -> ( Model, Effects Action )
@@ -482,26 +477,17 @@ stripeResponse { request, args, ok } model =
       if ok
       then
         ( model,
-          ElmFire.set
-            ( JE.object
-                [ ("uid", JE.string uid)
-                , ("email", JE.string email)
-                , ("slug", JE.string slug)
-                , ("price", JE.string price)
-                , ("title", JE.string title)
-                , ("token", JE.string tokenOrMsg)
-                , ("feedback", JE.string "")
-                ]
-            )
-            ( ElmFire.fromUrl Config.firebaseUrl
-                |> ElmFire.sub "purchases"
-                |> ElmFire.sub "queue"
-                |> ElmFire.sub "tasks"
-                |> ElmFire.push
-            )
-          |> Task.toResult
-          |> Task.map TaskPushResult
+          gatewayRequestEffect
+            { uid = uid
+            , email = email
+            , slug = slug
+            , price = price
+            , title = title
+            , operation = NewCustomer
+            , tokenOrCustomer = tokenOrMsg
+            }
           |> Effects.task
+
         )
       else
         ( { model
@@ -511,6 +497,48 @@ stripeResponse { request, args, ok } model =
         , Effects.none
         )
     _ -> ( model, Effects.none )
+
+
+type GatewayOperation = NewCustomer | ExistingCustomer
+
+
+type alias GatewayRequest =
+  { uid : String
+  , email : String
+  , slug : String
+  , price : String
+  , title : String
+  , operation : GatewayOperation
+  , tokenOrCustomer : String
+  }
+
+
+gatewayRequestEffect : GatewayRequest -> Task Never Action
+gatewayRequestEffect request =
+  ElmFire.set
+    ( JE.object
+        [ ( "uid", JE.string request.uid )
+        , ( "email", JE.string request.email )
+        , ( "slug", JE.string request.slug )
+        , ( "price", JE.string request.price )
+        , ( "title", JE.string request.title )
+        , ( "operation", JE.string <|
+              case request.operation of
+                NewCustomer -> "newCustomer"
+                ExistingCustomer -> "existingCustomer"
+          )
+        , ( "tokenOrCustomer", JE.string request.tokenOrCustomer )
+        , ( "feedback", JE.string "" )
+        ]
+    )
+    ( ElmFire.fromUrl Config.firebaseUrl
+        |> ElmFire.sub "purchases"
+        |> ElmFire.sub "queue"
+        |> ElmFire.sub "tasks"
+        |> ElmFire.push
+    )
+  |> Task.toResult
+  |> Task.map TaskPushResult
 
 
 type alias ViewContext =
@@ -601,11 +629,39 @@ view address context model =
             )
           , ( context.customer /= Nothing
             , H.div
-                [ HA.class "email" ]
-                [ H.text "Your email address: "
-                , H.text
-                  <| Maybe.withDefault ""
-                  <| Maybe.map .email context.customer
+                [ HA.class "customer" ]
+                [ H.div
+                    [ HA.class "email" ]
+                    [ H.text "Your email address: "
+                    , H.text
+                      <| Maybe.withDefault ""
+                      <| Maybe.map .email context.customer
+                    ]
+                , case context.customer of
+                    Just { paymentData } ->
+                      H.div
+                        [ HA.class "paymentData" ]
+                        ( case paymentData of
+                            Just { cardBrand, cardLast4 } ->
+                              let
+                                altIntent =
+                                  if intent == "existingCardBuy"
+                                  then ("newCardBuy", "Use new card")
+                                  else ("existingCardBuy", "Use this card")
+                              in
+                                [ H.text " Your card: "
+                                , H.text cardBrand
+                                , H.text " last4: "
+                                , H.text cardLast4
+                                , H.button
+                                  [ HE.onClick address (SwitchIntent <| fst altIntent) ]
+                                  [ H.text <| snd altIntent ]
+                                ]
+                            Nothing ->
+                              [ H.text "No card registered" ]
+                        )
+                    Nothing ->
+                      H.span [] [] -- unreachable
                 ]
             )
           , ( show.email
@@ -640,8 +696,6 @@ view address context model =
             , H.button
                 [ HA.class "sign-in"
                 , HA.disabled (not valid || model.busy)
-                -- TODO: Dispatch F.submit instead?
-                -- Cf. https://github.com/etaque/elm-simple-form/blob/b2ab56b8ab0224ab39ef5b83517b1e2b349b2c8d/example/src/View.elm#L57
                 , HE.onClick address Submit
                 ]
                 [ H.text <|

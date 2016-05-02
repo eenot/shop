@@ -13,7 +13,7 @@
           ".read": "auth.uid == 'stripe-gateway'",
           ".write": "auth.uid == $user"
         },
-        "stripeId": {
+        "paymentData": {
           ".write": "auth.uid == 'stripe-gateway'"
         }
       }

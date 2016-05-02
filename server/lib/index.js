@@ -12,30 +12,32 @@ const permissionsRef = rootRef.child ("permissions");
 
 var queue = null;
 
-// Authenticate at Firebase and initialize queue
-rootRef.authWithCustomToken (config.get ("firebase.token"), function (error, authData) {
-  if (error) {
-    console.error (error.message);
-  } else {
-    console.log ("Authenticated with uid: ", authData.uid);
-    queue = new Queue (queueRef, processTask);
-    console.log ("Waiting for tasks at: ", queueRef.toString ());
-  }
-});
-
 // Catch termination signal and shut down queue
-process.on('SIGINT', function() {
+process.on('SIGINT', () => {
   console.log('SIGINT');
   if (queue) {
     console.log('Starting queue shutdown');
-    queue.shutdown().then(function() {
+    queue.shutdown().then( () => {
       console.log('Finished queue shutdown');
-      process.exit(0);
     });
-  } else {
-    process.exit(0);
   }
+  process.exit (0);
 });
+
+// Authenticate at Firebase and initialize queue
+rootRef.authWithCustomToken (config.get ("firebase.token"))
+  .then (
+    authData => {
+      console.log ("Authenticated with uid: ", authData.uid);
+      queue = new Queue (queueRef, processTask);
+      console.log ("Waiting for tasks at: ", queueRef.toString ());
+    })
+  .catch (
+    error => {
+      console.error ("Firebase authentication error: ", error.message);
+      process.exit (1);
+    }
+  );
 
 // Schema to validate request data
 var schema = Joi.object().keys({
@@ -44,118 +46,123 @@ var schema = Joi.object().keys({
   slug: Joi.string().required(),
   price: Joi.number().options({ convert: true }).positive(),
   title: Joi.string().required(),
-  token: Joi.string().required(),
+  operation: Joi.string().required().valid(["newCustomer", "existingCustomer"]),
+  tokenOrCustomer: Joi.string().required(),
   feedback: Joi.string().valid("").required()
 });
 
-function processTask (rawData, progress, resolve, reject) {
+function processTask (rawData, progress, resolveTask, rejectTask) {
 
-  const report = function (msg) {
-    // In case of an error we set the key "feedback"
-    // Client will remove the task after receiving the feedback.
-    rawData .feedback = msg;
-    rawData ._new_state = "feedback";
-    resolve (rawData);
-  };
+  var customer, data;
 
-  console.log ("task: ", rawData);
-
-  // Validate request data
-  const validationResult = Joi.validate(rawData, schema);
-  if (validationResult.error) {
-    console.error ("invalid request data: ", validationResult.error.details);
-    report ("invalid request");
-    return;
-  }
-  const data = validationResult.value;
-  console.log ("task: ", data);
-
-  // Check whether given email matches the one stored for the given uid
-  customersRef
-    .child (data.uid)
-    .child ("email")
-    .once ("value", (emailSnapshot) => {
+  Promise.resolve ()
+    .then (() => {
+      // Validate request data
+      const validationResult = Joi.validate (rawData, schema);
+      if (validationResult.error) {
+        console.error ("invalid request data: ", validationResult.error.details);
+        throw new Error ("invalid request");
+      }
+      data = validationResult.value;
+      console.log ("task: ", data);
+      return null;
+    })
+    .then (() => {
+      // Check whether given email matches the one stored for the given uid
+      return customersRef.child (data.uid).child ("email").once ("value");
+    })
+    .then (emailSnapshot => {
       const emailFB = emailSnapshot.val ();
       if (emailFB !== data.email) {
         console.error (
           "email address mismatch: request: ", data.email,
           " database: ", emailFB
         );
-        report ("email address mismatch");
-        return;
+        throw new Error ("email address mismatch");
       }
-      // Create a Stripe customer from a token representing a card
-      stripe.customers.create({
-        source: data.token,
-        email: data.email
-      }, (error, customer) => {
-        if (error) {
-          if (error.type === 'StripeCardError') {
-            console.error ("Customer card declined: ", error);
-            report ("Customer card declined");
-          } else {
-            console.error ("Customer creation error: ", error);
-            report ("Customer creation error");
-          }
-          return;
-        }
-        progress (33);
-        // Write customer id into Firebase
-        customersRef
-          .child (data.uid)
-          .child ("stripeId")
-          .set (customer.id, error => {
-            if (error) {
-              console.error ("Cannot write customer id to Firebase: ", error);
-              report ("Firebase error");
-              return;
-            }
-            console.log ("customer: ", {uid: data.uid, stripeId: customer.id});
-            // Charge the customer
-            stripe.charges.create ({
-              amount: data.price,
-              currency: "usd",
-              customer: customer.id,
-              description: config.get ("strings.chargeDescriptionPrefix") + data.title,
-              statement_descriptor: (config.get ("strings.statementPrefix") + data.slug).slice (0, 22)
-            }, (error, charge) => {
-              if (error) {
-                if (error.type === 'StripeCardError') {
-                  console.error ("Charging card declined: ", error);
-                  report ("Charging card declined");
-                } else {
-                  console.error ("Charge error: ", error);
-                  report ("Charge error");
-                }
-                return;
-              }
-              progress (66);
-              console.log ("charge: ", {
-                uid: data.uid,
-                stripeId: customer.id,
-                chargeId: charge.id,
-                amount: charge.amount,
-                currency: charge.currency
-              });
-              // Grant permission to read the purchased item
-              permissionsRef
-                .child (data.uid)
-                .child (data.slug)
-                .child ("valid")
-                .set (true, error => {
-                  if (error) {
-                    console.error ("Cannot write permission to Firebase: ",
-                      error);
-                    report ("Firebase error");
-                    return;
-                  }
-                  console.log ("permission: ", {uid: data.uid, slug: data.slug});
-                  // Mark task as complete; it will be removed from the queue
-                  resolve ();
-                });
-            });
-          });
-      });
+      return null;
     })
 
+    .then (() => {
+      if (data.operation == "existingCustomer") {
+        customer = { id: data.tokenOrCustomer };
+        return null;
+      }
+      else {
+        // Create a new Stripe customer from a token representing a card
+        return stripe.customers.create ({
+          source: data.tokenOrCustomer,
+          email: data.email,
+          metadata: {uid: data.uid}
+        })
+        .then (customerLocal => {
+          // Read details of customers default card
+          customer = customerLocal;
+          return stripe.customers.retrieveCard (
+            customer.id, customer.default_source);
+        })
+        .then (card => {
+          progress (33);
+          console.log ("card: ",
+            {id: card.id, brand: card.brand, last4: card.last4});
+          // Write customer id into Firebase
+          return customersRef.child (data.uid).child ("paymentData")
+            .set ({
+              stripeId: customer.id,
+              cardBrand: card.brand,
+              cardLast4: card.last4
+            });
+        });
+      }
+    })
+
+    .then (() => {
+      // Charge the customer
+      return stripe.charges.create ({
+        amount: data.price,
+        currency: "usd",
+        customer: customer.id,
+        description: config.get ("strings.chargeDescriptionPrefix")
+        + data.title,
+        statement_descriptor: (config.get ("strings.statementPrefix")
+        + data.slug)
+          .slice (0, 22)
+      });
+    })
+    .then (charge => {
+      progress (66);
+      console.log ("charge: ", {
+        uid: data.uid,
+        stripeId: customer.id,
+        chargeId: charge.id,
+        amount: charge.amount,
+        currency: charge.currency
+      });
+      // Grant permission to read the purchased item
+      return permissionsRef
+        .child (data.uid).child (data.slug).child ("valid")
+        .set (true);
+    })
+    .then (() => {
+      console.log ("permission: ",
+        {uid: data.uid, slug: data.slug});
+      // Mark task as complete; it will be removed from the queue
+      resolveTask ();
+    })
+    .catch (error => {
+      // In case of an error we set the key "feedback"
+      // Client will remove the task after receiving the feedback.
+      var clientMessage = "Payment Gateway Error";
+      if (error.type === "StripeCardError") {
+        clientMessage = error.message || "Card declined";
+        console.log ("stripe card error: ", error.raw);
+      } else {
+        console.error (error.message);
+      }
+      rawData.feedback = clientMessage;
+      rawData._new_state = "feedback";
+      resolveTask (rawData);
+    });
 }
+
+
